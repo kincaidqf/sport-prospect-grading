@@ -1,0 +1,30 @@
+[project]
+name = "nba-draft-ml"
+version = "0.1.0"
+description = "NBA Draft Prospect ML Research"
+requires-python = ">=3.11"
+
+dependencies = [
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "transformers",
+    "datasets",
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "matplotlib",
+    "seaborn",
+    "pyyaml",
+    "hydra-core",
+    "tqdm",
+    "wandb"
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest",
+    "black",
+    "ruff",
+    "ipykernel"
+]

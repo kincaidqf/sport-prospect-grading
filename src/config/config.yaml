@@ -1,0 +1,11 @@
+model:
+  type: multimodal
+
+training:
+  batch_size: 32
+  lr: 0.001
+  epochs: 50
+
+data:
+  college_stats_path: data/processed/stats.csv
+  text_path: data/processed/scouting.csv
