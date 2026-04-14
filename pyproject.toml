@@ -18,7 +18,9 @@ dependencies = [
     "pyyaml",
     "hydra-core",
     "tqdm",
-    "wandb"
+    "wandb",
+    "playwright",
+    "nba-api>=1.11.4",
 ]
 
 [tool.uv]
