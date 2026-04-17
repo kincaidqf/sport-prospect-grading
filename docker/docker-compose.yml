@@ -6,7 +6,17 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     volumes:
-      - ../:/app
+      - ../src:/app/src
+      - ../data:/app/data
+      - ../notebooks:/app/notebooks
+      - ../outputs:/app/outputs
+      - ../wandb:/app/wandb
     environment:
       - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - WANDB_MODE=${WANDB_MODE:-offline}
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - DEVICE=cpu
     tty: true
+    stdin_open: true
+    command: ["uv", "run", "python", "src/main.py"]
