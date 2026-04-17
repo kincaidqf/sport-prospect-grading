@@ -19,6 +19,7 @@ dependencies = [
     "hydra-core",
     "tqdm",
     "wandb",
+    "mlflow",
     "playwright",
     "nba-api>=1.11.4",
 ]

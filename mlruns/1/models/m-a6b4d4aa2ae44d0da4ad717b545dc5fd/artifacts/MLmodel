@@ -1,0 +1,23 @@
+artifact_path: /Users/matthewarboleda/Desktop/DL-Lab/sport-prospect-grading/mlruns/1/models/m-a6b4d4aa2ae44d0da4ad717b545dc5fd/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.11.15
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.8.0
+    skops_trusted_types: null
+mlflow_version: 3.11.1
+model_id: m-a6b4d4aa2ae44d0da4ad717b545dc5fd
+model_size_bytes: 4827
+model_uuid: m-a6b4d4aa2ae44d0da4ad717b545dc5fd
+prompts: null
+run_id: ba21b90128774cfb9325d806a9654cfc
+utc_time_created: '2026-04-17 18:22:33.520458'
