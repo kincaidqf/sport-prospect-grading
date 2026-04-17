@@ -11,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 
 # NCAA stats columns used as model features (update as needed)
 STAT_FEATURE_COLS: list[str] = [
-    # TODO: populate after EDA — src/data/players.csv column audit
+    # TODO: populate after EDA — data/scouting/players.csv column audit
 ]
 
 # Scouting numeric rating columns

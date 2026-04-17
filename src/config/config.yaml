@@ -28,8 +28,8 @@ training:
   seed: 42
 
 data:
-  stats_path: src/data/players.csv
-  scouting_path: src/data/scouting_texts.txt
+  stats_path: data/scouting/players.csv
+  scouting_path: data/scouting/scouting_texts.txt
   nba_path: data/nba/nba_master.csv
   ncaa_path: data/ncaa/ncaa_master.csv
   target_col: PLUS_MINUS      # NBA performance target

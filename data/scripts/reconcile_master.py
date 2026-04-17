@@ -2,7 +2,7 @@
 reconcile_master.py
 
 Reconcile nba_stats_best_season.csv and ncaa_stats_master.csv against
-src/data/players_list.txt, producing two matched output files:
+data/scouting/players_list.txt, producing two matched output files:
 
   data/nba/nba_master.csv   — one row per player, NBA stats
   data/ncaa/ncaa_master.csv — one row per player, NCAA stats (last season before draft)
@@ -23,7 +23,7 @@ import pandas as pd
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 ROOT = Path(__file__).parent.parent.parent
-PLAYERS_LIST = ROOT / "src" / "data" / "players_list.txt"
+PLAYERS_LIST = ROOT / "data" / "scouting" / "players_list.txt"
 NBA_INPUT = ROOT / "data" / "nba" / "nba_stats_best_season.csv"
 NCAA_INPUT = ROOT / "data" / "ncaa" / "ncaa_stats_master.csv"
 NBA_OUTPUT = ROOT / "data" / "nba" / "nba_master.csv"

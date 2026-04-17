@@ -23,7 +23,7 @@ from nba_api.stats.static import players as nba_players
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 ROOT = Path(__file__).parent.parent.parent
-PLAYERS_LIST = ROOT / "src" / "data" / "players_list.txt"
+PLAYERS_LIST = ROOT / "data" / "scouting" / "players_list.txt"
 OUTPUT_CSV = ROOT / "data" / "nba" / "nba_stats_best_season.csv"
 
 # Delay between season-level API calls (seconds)

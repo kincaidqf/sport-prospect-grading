@@ -36,8 +36,8 @@ from nba_api.stats.static import players as nba_static
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 ROOT = Path(__file__).parent.parent.parent
-PLAYERS_LIST = ROOT / "src" / "data" / "players_list.txt"
-PLAYERS_CSV = ROOT / "src" / "data" / "players.csv"
+PLAYERS_LIST = ROOT / "data" / "scouting" / "players_list.txt"
+PLAYERS_CSV = ROOT / "data" / "scouting" / "players.csv"
 PREV_OUTPUT = ROOT / "data" / "nba" / "nba_stats_best_season.csv"
 OUTPUT_CSV = ROOT / "data" / "nba" / "nba_stats_best_season.csv"
 SEASON_CACHE_DIR = ROOT / "data" / "nba" / "season_cache"
