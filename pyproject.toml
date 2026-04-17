@@ -28,5 +28,7 @@ dev-dependencies = [
     "pytest",
     "black",
     "ruff",
-    "ipykernel"
+    "ipykernel",
+    "jupyter",
+    "notebook",
 ]
