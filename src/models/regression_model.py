@@ -17,12 +17,16 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import mlflow
+import mlflow.sklearn
 from sklearn.linear_model import LassoCV, RidgeCV
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+
+MLFLOW_EXPERIMENT = "nba-draft-prospect-regression"
 
 # Paths
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -143,37 +147,68 @@ def train_and_evaluate(df):
     alphas = np.logspace(-3, 2, 100)
     results = {}
 
+    mlflow.set_experiment(MLFLOW_EXPERIMENT)
+
     for name, model in [
         ("Lasso", LassoCV(alphas=alphas, cv=5, max_iter=10000, random_state=42)),
         ("Ridge", RidgeCV(alphas=alphas, cv=5)),
     ]:
-        pipe = Pipeline([
-            ("preprocessor", preprocessor),
-            (name.lower(), model),
-        ])
-        pipe.fit(X_train, y_train)
-        y_pred = pipe.predict(X_test)
+        with mlflow.start_run(run_name=name):
+            pipe = Pipeline([
+                ("preprocessor", preprocessor),
+                (name.lower(), model),
+            ])
+            pipe.fit(X_train, y_train)
+            y_pred = pipe.predict(X_test)
 
-        r2 = r2_score(y_test, y_pred)
-        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-        mae = mean_absolute_error(y_test, y_pred)
-        best_alpha = model.alpha_
+            r2 = r2_score(y_test, y_pred)
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            mae = mean_absolute_error(y_test, y_pred)
+            best_alpha = model.alpha_
 
-        results[name] = {
-            "pipe": pipe,
-            "model": model,
-            "y_pred": y_pred,
-            "r2": r2,
-            "rmse": rmse,
-            "mae": mae,
-            "alpha": best_alpha,
-        }
+            # Log hyperparameters
+            mlflow.log_params({
+                "model": name,
+                "alpha": best_alpha,
+                "cv_folds": 5,
+                "train_years": f"{min(TRAIN_YEARS)}-{max(TRAIN_YEARS)}",
+                "test_years": f"{min(TEST_YEARS)}-{max(TEST_YEARS)}",
+                "n_train": len(train),
+                "n_test": len(test),
+                "n_features_raw": len(feature_cols),
+            })
 
-        print(f"{'='*40}")
-        print(f"  {name} (alpha={best_alpha:.4f})")
-        print(f"  R²   = {r2:.4f}")
-        print(f"  RMSE = {rmse:.4f}")
-        print(f"  MAE  = {mae:.4f}")
+            # Log evaluation metrics
+            mlflow.log_metrics({"r2": r2, "rmse": rmse, "mae": mae})
+
+            # Log Lasso-specific coefficient info
+            if name == "Lasso":
+                coef_df = _get_lasso_coef_df(pipe, numeric_cols, categorical_cols, ordinal_cols)
+                mlflow.log_metric("n_nonzero_features", len(coef_df))
+                # Log each non-zero coefficient as a metric for easy comparison across runs
+                for _, row in coef_df.iterrows():
+                    safe_name = row["feature"].replace(" ", "_").replace("%", "pct").replace("-", "_")
+                    mlflow.log_metric(f"coef_{safe_name}", row["coefficient"])
+
+            # Log the fitted pipeline as a model artifact
+            mlflow.sklearn.log_model(pipe, artifact_path=name.lower())
+
+            results[name] = {
+                "pipe": pipe,
+                "model": model,
+                "y_pred": y_pred,
+                "r2": r2,
+                "rmse": rmse,
+                "mae": mae,
+                "alpha": best_alpha,
+            }
+
+            print(f"{'='*40}")
+            print(f"  {name} (alpha={best_alpha:.4f})")
+            print(f"  R²   = {r2:.4f}")
+            print(f"  RMSE = {rmse:.4f}")
+            print(f"  MAE  = {mae:.4f}")
+            print(f"  MLflow run logged under experiment '{MLFLOW_EXPERIMENT}'")
 
     # Feature importance: Lasso non-zero coefficients
     print(f"\n{'='*40}")
@@ -184,12 +219,12 @@ def train_and_evaluate(df):
     return results, y_test
 
 
-def _print_lasso_coefficients(pipe, numeric_cols, categorical_cols, ordinal_cols):
+def _get_lasso_coef_df(pipe, numeric_cols, categorical_cols, ordinal_cols):
+    """Return a DataFrame of non-zero Lasso coefficients sorted by |coef|."""
     preprocessor = pipe.named_steps["preprocessor"]
     lasso = pipe.named_steps["lasso"]
     coefs = lasso.coef_
 
-    # Reconstruct feature names after ColumnTransformer
     num_names = list(numeric_cols)
     cat_names = list(
         preprocessor.named_transformers_["cat"]
@@ -197,13 +232,22 @@ def _print_lasso_coefficients(pipe, numeric_cols, categorical_cols, ordinal_cols
         .get_feature_names_out(categorical_cols)
     )
     ord_names = ordinal_cols
-
     all_names = num_names + cat_names + ord_names
 
     coef_df = pd.DataFrame({"feature": all_names, "coefficient": coefs})
     coef_df = coef_df[coef_df["coefficient"] != 0].copy()
     coef_df["abs_coef"] = coef_df["coefficient"].abs()
-    coef_df = coef_df.sort_values("abs_coef", ascending=False)
+    return coef_df.sort_values("abs_coef", ascending=False)
+
+
+def _print_lasso_coefficients(pipe, numeric_cols, categorical_cols, ordinal_cols):
+    preprocessor = pipe.named_steps["preprocessor"]
+    all_names = (
+        list(numeric_cols)
+        + list(preprocessor.named_transformers_["cat"].named_steps["onehot"].get_feature_names_out(categorical_cols))
+        + list(ordinal_cols)
+    )
+    coef_df = _get_lasso_coef_df(pipe, numeric_cols, categorical_cols, ordinal_cols)
 
     print(f"  {len(coef_df)} / {len(all_names)} features retained\n")
     for _, row in coef_df.iterrows():
@@ -234,6 +278,19 @@ def plot_results(results, y_test):
     out_path = os.path.join(PROJECT_ROOT, "src", "models", "regression_results.png")
     plt.savefig(out_path, dpi=150)
     print(f"\nPlot saved to {out_path}")
+
+    # Log the comparison plot to MLflow under a summary run
+    mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    with mlflow.start_run(run_name="summary_plot"):
+        mlflow.log_artifact(out_path, artifact_path="plots")
+        # Also surface top-line metrics from both models for easy comparison
+        for name, res in results.items():
+            mlflow.log_metrics({
+                f"{name.lower()}_r2": res["r2"],
+                f"{name.lower()}_rmse": res["rmse"],
+                f"{name.lower()}_mae": res["mae"],
+            })
+
     plt.show()
 
 
