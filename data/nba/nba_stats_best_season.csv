@@ -33,7 +33,7 @@ Jrue Holiday,2009.0,31.0,Point Guard/Shooting Guard,201950.0,2011-12,3.3,65.0,33
 Dionte Christmas,2009.0,32.0,Shooting Guard,202091.0,2013-14,-0.7,31.0,6.4,2.3,1.2,0.3,0.1,0.1,0.355,0.29,0.75,0.7,2.0,0.3,1.0,0.6,0.8,0.4,0.8,0.2,0.6,PHX,ok,202091.0,Dionte Christmas
 Jonas Jerebko,2009.0,33.0,Small Forward,201973.0,2013-14,-1.4,64.0,11.6,4.2,2.7,0.6,0.3,0.1,0.471,0.419,0.729,1.5,3.3,0.5,1.2,0.7,0.9,0.8,1.9,0.7,1.3,DET,ok,201973.0,Jonas Jerebko
 Jermaine Taylor,2009.0,34.0,Shooting Guard,201966.0,2010-11,-2.9,34.0,14.2,6.6,1.8,0.9,0.4,0.1,0.48,0.311,0.75,2.8,5.8,0.4,1.3,0.6,0.8,0.8,1.1,1.4,1.1,SAC,ok,201966.0,Jermaine Taylor
-Patrick Mills,2009.0,35.0,Point Guard,201988.0,2011-12,2.4,16.0,16.3,10.3,1.8,2.4,0.6,0.1,0.485,0.429,1.0,3.9,8.1,1.5,3.5,0.9,0.9,0.3,1.5,1.6,0.9,SAS,recovered:last_unique,201988.0,Patty Mills
+Patrick Mills,2009.0,35.0,Point Guard,201988.0,2013-14,4.2,81.0,18.9,10.2,2.1,1.8,0.8,0.1,0.464,0.425,0.89,3.8,8.2,1.7,3.9,0.9,1.0,0.4,1.7,0.8,1.4,SAS,recovered:last_unique,201988.0,Patty Mills
 Marcus Thornton,2009.0,36.0,Shooting Guard,201977.0,2013-14,-0.4,72.0,24.2,9.8,2.8,1.1,0.8,0.2,0.394,0.345,0.804,3.5,8.9,1.5,4.4,1.3,1.6,0.8,2.0,0.9,1.5,BKN,ok,201977.0,Marcus Thornton
 Josh Heytvelt,2009.0,37.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Austin Daye,2009.0,38.0,Small Forward,201948.0,2012-13,0.4,55.0,12.3,4.5,2.2,0.8,0.3,0.4,0.433,0.418,0.765,1.6,3.8,0.7,1.8,0.5,0.6,0.3,1.9,0.5,1.5,MEM,ok,201948.0,Austin Daye
@@ -54,7 +54,7 @@ Sergio Llull,2009.0,52.0,Point Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Wesley Matthews,2009.0,53.0,Shooting Guard,202083.0,2013-14,3.7,82.0,33.9,16.4,3.5,2.4,0.9,0.2,0.441,0.393,0.837,5.4,12.3,2.5,6.2,3.1,3.7,0.6,2.9,1.3,2.1,POR,ok,202083.0,Wesley Matthews
 Jodie Meeks,2009.0,54.0,Shooting Guard,201975.0,2011-12,2.9,66.0,24.9,8.4,2.4,0.8,0.6,0.0,0.409,0.365,0.906,2.9,7.1,1.5,4.0,1.2,1.3,0.3,2.2,0.4,1.2,PHI,ok,201975.0,Jodie Meeks
 Terrel Harris,2009.0,55.0,Shooting Guard,202227.0,2012-13,-0.1,20.0,6.9,0.8,1.3,0.5,0.1,0.2,0.148,0.0,0.7,0.2,1.4,0.0,0.4,0.4,0.5,0.2,1.1,0.9,0.9,NOH,ok,202227.0,Terrel Harris
-Chris Johnsonn,2009.0,56.0,Power Forward/Center,202419.0,2011-12,-1.3,27.0,6.5,2.0,1.5,0.1,0.2,0.3,0.488,0.0,0.789,0.7,1.5,0.0,0.0,0.6,0.7,0.6,0.9,0.6,1.2,NOH,recovered:full_fuzzy,202419.0,Chris Johnson
+Chris Johnsonn,2009.0,56.0,Power Forward/Center,202419.0,2012-13,-0.8,30.0,9.5,3.9,2.0,0.3,0.2,0.9,0.64,0.0,0.618,1.6,2.5,0.0,0.0,0.7,1.1,0.7,1.3,0.4,1.6,MIN,recovered:full_fuzzy,202419.0,Chris Johnson
 Sergii Gladyr,2009.0,57.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 AJ Price,2009.0,58.0,Point Guard,201985.0,2009-10,0.9,56.0,15.5,7.3,1.6,1.9,0.6,0.1,0.41,0.345,0.8,2.6,6.3,1.1,3.1,1.1,1.3,0.2,1.4,1.1,0.9,IND,ok,201985.0,AJ Price
 Vitor Faverani,2009.0,59.0,Power Forward/Center,203543.0,2013-14,-2.6,37.0,13.2,4.4,3.5,0.4,0.4,0.7,0.435,0.3,0.649,1.7,4.0,0.3,1.1,0.6,1.0,1.1,2.3,1.1,2.0,BOS,ok,203543.0,Vitor Faverani
@@ -83,7 +83,7 @@ Daniel Hackett,2009.0,81.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,no
 Luke Nevill,2009.0,82.0,Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 AJ Abrams,2009.0,83.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Josh Shipp,2009.0,84.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
-Dominic James,2009.0,85.0,Point Guard,202345.0,2010-11,-1.2,25.0,16.1,4.4,3.4,0.8,0.6,0.5,0.447,0.0,0.643,1.8,4.1,0.0,0.1,0.7,1.1,0.7,2.7,1.0,1.4,NJN,recovered:last+initial,202345.0,Damion James
+Dominic James,2009.0,85.0,Point Guard,202345.0,2013-14,2.4,5.0,10.1,1.2,2.4,0.6,0.0,0.2,0.222,0.0,1.0,0.4,1.8,0.0,0.4,0.4,0.4,0.2,2.2,0.2,0.6,SAS,recovered:last+initial,202345.0,Damion James
 Jeremy Pargo,2009.0,86.0,Point Guard,202951.0,2011-12,-2.7,44.0,9.6,2.9,0.8,1.3,0.3,0.0,0.333,0.263,0.593,1.1,3.4,0.2,0.9,0.4,0.6,0.3,0.6,1.0,1.0,MEM,ok,202951.0,Jeremy Pargo
 Russell Hicks,2009.0,87.0,Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Patrick Beverly,2009.0,88.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
@@ -93,7 +93,7 @@ Luigi Datome,2009.0,91.0,Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,
 Antonio Anderson,2009.0,92.0,Shooting Guard,202079.0,2009-10,-2.0,1.0,14.6,2.0,1.0,0.0,0.0,0.0,0.333,0.0,0.0,1.0,3.0,0.0,0.0,0.0,0.0,1.0,0.0,1.0,1.0,OKC,ok,202079.0,Antonio Anderson
 Joe Ingles,2009.0,93.0,Shooting Guard/Small Forward,204060.0,,,,,,,,,,,,,,,,,,,,,,,,no_data_in_2009-10_to_2013-14,,
 Kevin Rogers,2009.0,94.0,Small Forward/Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
-Charlie Coley,2009.0,95.0,Small Forward,202708.0,2011-12,-0.8,65.0,19.4,6.8,1.4,2.0,0.7,0.0,0.393,0.276,0.776,2.7,6.9,0.3,1.2,1.0,1.3,0.3,1.1,1.6,1.9,MIA,recovered:last_fuzzy,202708.0,Norris Cole
+Charlie Coley,2009.0,95.0,Small Forward,202708.0,2013-14,1.2,82.0,24.6,6.4,2.0,3.0,0.9,0.1,0.414,0.345,0.779,2.5,6.1,0.7,2.1,0.6,0.8,0.2,1.7,1.5,1.9,MIA,recovered:last_fuzzy,202708.0,Norris Cole
 Lorrenzo Wade,2009.0,96.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Eric Devendorf,2009.0,97.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Lewis Clinch,2009.0,98.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
@@ -128,7 +128,7 @@ Terrico White,2010.0,26.0,Point Guard/Shooting Guard,202358.0,,,,,,,,,,,,,,,,,,,
 Eric Bledsoe,2010.0,27.0,Point Guard/Shooting Guard,202339.0,2013-14,3.2,43.0,32.9,17.7,4.7,5.5,1.6,0.3,0.477,0.357,0.772,6.2,12.9,1.2,3.3,4.3,5.5,0.6,4.1,3.3,2.3,PHX,ok,202339.0,Eric Bledsoe
 Larry Sanders,2010.0,28.0,Power Forward/Center,202336.0,2011-12,1.9,52.0,12.4,3.6,3.1,0.6,0.6,1.5,0.457,0.0,0.474,1.6,3.5,0.0,0.0,0.3,0.7,1.2,1.9,0.8,2.6,MIL,ok,202336.0,Larry Sanders
 Damion James,2010.0,29.0,Small Forward,202345.0,2013-14,2.4,5.0,10.1,1.2,2.4,0.6,0.0,0.2,0.222,0.0,1.0,0.4,1.8,0.0,0.4,0.4,0.4,0.2,2.2,0.2,0.6,SAS,ok,202345.0,Damion James
-Stanley Robinson,2010.0,30.0,Small Forward,203080.0,2012-13,-2.1,70.0,15.1,4.8,4.5,0.7,0.6,0.4,0.43,0.0,0.523,2.0,4.6,0.0,0.0,0.8,1.6,1.7,2.8,1.3,1.8,HOU,recovered:last_unique,203080.0,Thomas Robinson
+Stanley Robinson,2010.0,30.0,Small Forward,203080.0,2014-15,0.2,54.0,14.8,5.7,5.6,0.6,0.6,0.4,0.485,0.0,0.528,2.3,4.8,0.0,0.0,1.0,2.0,1.8,3.9,1.1,1.9,PHI,recovered:last_unique,203080.0,Thomas Robinson
 Kevin Seraphin,2010.0,31.0,Power Forward/Center,202338.0,2011-12,-0.6,57.0,20.6,7.9,4.9,0.6,0.3,1.3,0.531,0.0,0.671,3.6,6.7,0.0,0.0,0.8,1.2,1.8,3.1,1.2,2.3,WAS,ok,202338.0,Kevin Seraphin
 Willie Warren,2010.0,32.0,Point Guard/Shooting Guard,202378.0,2010-11,1.3,19.0,7.0,1.9,0.6,1.4,0.3,0.0,0.371,0.333,0.75,0.7,1.8,0.3,0.8,0.3,0.4,0.1,0.6,0.4,0.8,LAC,ok,202378.0,Willie Warren
 Lance Stephenson,2010.0,33.0,Shooting Guard,202362.0,2012-13,4.9,78.0,29.2,8.8,3.9,2.9,1.0,0.2,0.46,0.33,0.652,3.5,7.7,0.8,2.4,1.0,1.5,0.6,3.3,1.4,2.1,IND,ok,202362.0,Lance Stephenson
@@ -175,11 +175,11 @@ Kevin Palmer,2010.0,73.0,Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,
 Tyler Smith Tennessee,2010.0,74.0,Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Magnum Rolle,2010.0,75.0,Small Forward/Power Forward,202375.0,,,,,,,,,,,,,,,,,,,,,,,,no_data_in_2010-11_to_2014-15,,
 JP Prince,2010.0,76.0,Shooting Guard,201985.0,2011-12,0.8,44.0,12.9,3.9,1.4,2.0,0.5,0.0,0.339,0.295,0.8,1.3,4.0,0.6,2.0,0.6,0.8,0.3,1.1,0.7,0.7,IND,recovered:last_fuzzy,201985.0,AJ Price
-Theo Robertson,2010.0,77.0,Shooting Guard/Small Forward,203460.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last_fuzzy,,
+Theo Robertson,2010.0,77.0,Shooting Guard/Small Forward,203460.0,2014-15,1.6,67.0,19.2,3.4,3.8,1.0,0.8,0.4,0.458,0.247,0.479,1.4,3.0,0.3,1.3,0.3,0.7,0.9,2.9,0.7,2.1,OKC,recovered:last_fuzzy,203460.0,Andre Roberson
 Ben Uzoh,2010.0,78.0,Point Guard/Shooting Guard,202386.0,2011-12,0.5,18.0,20.5,4.5,3.7,3.4,0.9,0.2,0.354,0.0,0.579,1.9,5.5,0.0,0.1,0.6,1.1,1.1,2.7,1.1,1.7,TOR,ok,202386.0,Ben Uzoh
-Ryan Thompson,2010.0,79.0,Shooting Guard/Small Forward,202684.0,2012-13,-2.9,82.0,31.3,11.7,9.4,1.3,0.7,0.9,0.488,0.0,0.608,4.8,9.7,0.0,0.0,2.2,3.5,3.7,5.7,1.5,2.9,CLE,recovered:full_fuzzy,202684.0,Tristan Thompson
+Ryan Thompson,2010.0,79.0,Shooting Guard/Small Forward,202684.0,2014-15,2.7,82.0,26.8,8.5,8.0,0.5,0.4,0.7,0.547,0.0,0.641,3.3,6.0,0.0,0.0,1.9,3.0,3.3,4.7,1.0,2.3,CLE,recovered:full_fuzzy,202684.0,Tristan Thompson
 Tim Ohlbrecht,2010.0,80.0,Power Forward,203317.0,2012-13,-2.3,3.0,3.9,1.0,0.3,0.3,0.3,0.0,0.333,0.0,1.0,0.3,1.0,0.0,0.0,0.3,0.3,0.0,0.3,1.3,0.3,HOU,ok,203317.0,Tim Ohlbrecht
-Deon Thompson,2010.0,81.0,Power Forward,201574.0,2011-12,-1.6,64.0,25.9,9.1,6.9,1.2,0.7,0.7,0.535,0.0,0.602,3.7,6.9,0.0,0.0,1.7,2.8,2.6,4.3,1.1,2.3,SAC,recovered:full_fuzzy_wide_era,201574.0,Jason Thompson
+Deon Thompson,2010.0,81.0,Power Forward,201574.0,2013-14,-0.1,82.0,24.5,7.1,6.4,0.6,0.4,0.7,0.506,0.0,0.579,3.1,6.0,0.0,0.0,1.0,1.8,1.9,4.6,1.2,3.1,SAC,recovered:full_fuzzy_wide_era,201574.0,Jason Thompson
 Tommy Mason-Griffin,2010.0,82.0,Point Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Jon Scheyer,2010.0,83.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Edwin Ubiles,2010.0,84.0,Shooting Guard,202775.0,2011-12,-4.5,4.0,13.0,3.5,2.5,0.3,0.3,0.3,0.278,0.2,1.0,1.3,4.5,0.3,1.3,0.8,0.8,0.5,2.0,0.3,0.3,WAS,ok,202775.0,Edwin Ubiles
@@ -188,7 +188,7 @@ DeShawn Sims,2010.0,86.0,Small Forward/Power Forward,203156.0,2012-13,0.5,2.0,2.
 Sylven Landesberg,2010.0,87.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Wayne Chism,2010.0,88.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Marqus Blakely,2010.0,89.0,Small Forward,202392.0,,,,,,,,,,,,,,,,,,,,,,,,no_data_in_2010-11_to_2014-15,,
-Jerome Randle,2010.0,90.0,Point Guard,203944.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last_unique_wide_era,,
+Jerome Randle,2010.0,90.0,Point Guard,203944.0,2014-15,-18.0,1.0,13.6,2.0,0.0,0.0,0.0,0.0,0.333,0.0,0.0,1.0,3.0,0.0,0.0,0.0,2.0,0.0,0.0,1.0,1.0,LAL,recovered:last_unique_wide_era,203944.0,Julius Randle
 Raymar Morgan,2010.0,91.0,Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Aubrey Coleman,2010.0,92.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Landry Fields,2010.0,93.0,Small Forward,202361.0,2011-12,3.2,66.0,28.7,8.8,4.2,2.6,1.2,0.3,0.46,0.256,0.562,3.6,7.8,0.5,1.8,1.2,2.1,0.9,3.3,1.5,1.5,NYK,ok,202361.0,Landry Fields
@@ -280,14 +280,14 @@ Justin Brownlee,2011.0,78.0,Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_a
 Dogus Balbay,2011.0,79.0,Point Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Michael Dunigan,2011.0,80.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Austin Freeman,2011.0,81.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
-Jeff Allen,2011.0,82.0,Small Forward/Power Forward,202730.0,2011-12,1.1,41.0,15.2,4.1,4.2,0.8,0.3,0.4,0.473,0.0,0.786,1.9,4.1,0.0,0.0,0.3,0.3,1.1,3.0,0.5,1.8,PHI,recovered:last_unique,202730.0,Lavoy Allen
+Jeff Allen,2011.0,82.0,Small Forward/Power Forward,202730.0,2015-16,2.4,79.0,20.2,5.4,5.4,1.0,0.3,0.5,0.516,0.0,0.63,2.4,4.7,0.0,0.0,0.6,0.9,2.1,3.3,0.9,1.9,IND,recovered:last_unique,202730.0,Lavoy Allen
 Delroy James,2011.0,83.0,Small Forward,202345.0,2013-14,2.4,5.0,10.1,1.2,2.4,0.6,0.0,0.2,0.222,0.0,1.0,0.4,1.8,0.0,0.4,0.4,0.4,0.2,2.2,0.2,0.6,SAS,recovered:last+initial,202345.0,Damion James
-Chaisson Allen,2011.0,84.0,Point Guard/Shooting Guard,202730.0,2011-12,1.1,41.0,15.2,4.1,4.2,0.8,0.3,0.4,0.473,0.0,0.786,1.9,4.1,0.0,0.0,0.3,0.3,1.1,3.0,0.5,1.8,PHI,recovered:last_unique,202730.0,Lavoy Allen
+Chaisson Allen,2011.0,84.0,Point Guard/Shooting Guard,202730.0,2015-16,2.4,79.0,20.2,5.4,5.4,1.0,0.3,0.5,0.516,0.0,0.63,2.4,4.7,0.0,0.0,0.6,0.9,2.1,3.3,0.9,1.9,IND,recovered:last_unique,202730.0,Lavoy Allen
 Ben Hansbrough,2011.0,85.0,Point Guard/Shooting Guard,203162.0,2012-13,-1.1,28.0,7.2,2.0,0.6,0.8,0.3,0.1,0.333,0.261,0.778,0.5,1.6,0.2,0.8,0.8,1.0,0.1,0.6,0.6,0.8,IND,ok,203162.0,Ben Hansbrough
 Corey Fisher,2011.0,86.0,Point Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Randy Culpepper,2011.0,87.0,Point Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Lavoy Allen,2011.0,88.0,Power Forward,202730.0,2015-16,2.4,79.0,20.2,5.4,5.4,1.0,0.3,0.5,0.516,0.0,0.63,2.4,4.7,0.0,0.0,0.6,0.9,2.1,3.3,0.9,1.9,IND,ok,202730.0,Lavoy Allen
-Terrence Jennings,2011.0,89.0,Power Forward,201943.0,2011-12,-1.6,66.0,35.3,19.1,3.4,5.5,1.6,0.3,0.418,0.332,0.808,7.1,17.0,2.0,5.9,2.9,3.6,0.7,2.7,2.2,1.7,MIL,recovered:last_unique_wide_era,201943.0,Brandon Jennings
+Terrence Jennings,2011.0,89.0,Power Forward,201943.0,2014-15,0.8,41.0,28.6,15.4,2.5,6.6,1.1,0.1,0.401,0.36,0.839,5.3,13.2,1.9,5.1,2.9,3.5,0.5,2.0,2.2,1.6,DET,recovered:last_unique_wide_era,201943.0,Brandon Jennings
 Pablo Aguilar,2011.0,90.0,Small Forward/Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Gilbert Brown,2011.0,91.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Steven Gray,2011.0,92.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
@@ -298,7 +298,7 @@ Alex Tyus,2011.0,96.0,Small Forward/Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_fo
 Jeremy Hazell,2011.0,97.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Clarence Jackson,2011.0,98.0,Shooting Guard,202704.0,2013-14,4.4,80.0,28.5,13.1,3.9,4.1,1.1,0.1,0.44,0.339,0.893,5.0,11.5,1.0,3.1,2.0,2.2,0.5,3.4,2.1,1.8,OKC,recovered:last_unique,202704.0,Reggie Jackson
 Ferrakohn Hall,2011.0,99.0,Small Forward/Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
-Mark Payne,2011.0,100.0,Point Guard/Shooting Guard,203940.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last_unique,,
+Mark Payne,2011.0,100.0,Point Guard/Shooting Guard,203940.0,2015-16,-2.3,52.0,9.3,2.5,2.1,0.6,0.3,0.2,0.366,0.281,0.654,1.0,2.8,0.2,0.6,0.3,0.5,0.4,1.8,0.7,1.5,MIN,recovered:last_unique,203940.0,Adreian Payne
 Anthony Davis,2012.0,1.0,Power Forward,203076.0,2014-15,3.9,68.0,36.1,24.4,10.2,2.2,1.5,2.9,0.535,0.083,0.805,9.4,17.6,0.0,0.2,5.5,6.8,2.5,7.7,1.4,2.1,NOP,ok,203076.0,Anthony Davis
 Andre Drummond,2012.0,2.0,Power Forward/Center,203083.0,2015-16,1.6,81.0,32.9,16.2,14.8,0.8,1.5,1.4,0.521,0.333,0.355,6.8,13.1,0.0,0.1,2.6,7.2,4.9,9.9,1.9,3.0,DET,ok,203083.0,Andre Drummond
 Harrison Barnes,2012.0,3.0,Small Forward,203084.0,2015-16,6.8,66.0,30.9,11.7,4.9,1.8,0.6,0.2,0.466,0.383,0.761,4.5,9.6,1.2,3.2,1.5,2.0,1.2,3.8,0.9,2.1,GSW,ok,203084.0,Harrison Barnes
@@ -312,7 +312,7 @@ Austin Rivers,2012.0,10.0,Shooting Guard,203085.0,2016-17,-0.1,74.0,27.8,12.0,2.
 Meyers Leonard,2012.0,11.0,Center,203086.0,2015-16,1.6,61.0,21.8,8.4,5.1,1.5,0.1,0.3,0.448,0.377,0.761,3.2,7.1,1.4,3.7,0.6,0.8,0.8,4.3,1.3,3.0,POR,ok,203086.0,Meyers Leonard
 Tyler Zeller,2012.0,12.0,Power Forward/Center,203092.0,2016-17,0.0,51.0,10.3,3.5,2.4,0.8,0.1,0.4,0.494,0.0,0.564,1.5,3.1,0.0,0.0,0.4,0.8,0.8,1.6,0.4,1.2,BOS,ok,203092.0,Tyler Zeller
 Kendall Marshall,2012.0,13.0,Point Guard,203088.0,2014-15,2.0,28.0,14.9,4.2,1.0,3.1,0.8,0.0,0.455,0.391,0.889,1.6,3.6,0.6,1.6,0.3,0.3,0.1,0.9,1.3,0.9,MIL,ok,203088.0,Kendall Marshall
-Moe Harkless,2012.0,14.0,Small Forward,203090.0,2014-15,-2.0,45.0,15.0,3.5,2.4,0.6,0.7,0.2,0.399,0.179,0.537,1.4,3.5,0.2,1.2,0.5,0.9,0.8,1.5,0.6,1.5,ORL,recovered:last_unique,203090.0,Maurice Harkless
+Moe Harkless,2012.0,14.0,Small Forward,203090.0,2016-17,0.6,77.0,28.9,10.0,4.4,1.1,1.1,0.9,0.503,0.351,0.621,4.1,8.1,0.9,2.5,1.0,1.6,1.6,2.8,1.1,2.8,POR,recovered:last_unique,203090.0,Maurice Harkless
 Andrew Nicholson,2012.0,15.0,Power Forward,203094.0,2015-16,0.6,56.0,14.7,6.9,3.6,0.4,0.2,0.4,0.471,0.36,0.785,2.6,5.5,0.7,2.0,0.9,1.2,0.6,3.0,0.7,1.2,ORL,ok,203094.0,Andrew Nicholson
 Arnett Moultrie,2012.0,16.0,Power Forward,203102.0,2012-13,-1.8,47.0,11.5,3.7,3.1,0.2,0.4,0.2,0.582,0.0,0.643,1.7,2.9,0.0,0.0,0.4,0.6,1.6,1.5,0.4,0.9,PHI,ok,203102.0,Arnett Moultrie
 Dion Waiters,2012.0,17.0,Shooting Guard,203079.0,2015-16,2.7,78.0,27.6,9.8,2.6,2.0,1.0,0.2,0.399,0.358,0.713,3.6,9.1,1.1,3.1,1.4,2.0,0.5,2.1,1.5,1.8,OKC,ok,203079.0,Dion Waiters
@@ -368,7 +368,7 @@ Tony Mitchell,2012.0,66.0,Small Forward,203183.0,2013-14,0.7,3.0,3.3,2.0,0.3,0.3
 Orlando Johnson,2012.0,67.0,Small Forward,203111.0,2012-13,-0.1,51.0,12.1,4.0,2.2,0.9,0.2,0.2,0.4,0.383,0.719,1.4,3.5,0.7,1.8,0.5,0.6,0.4,1.8,0.6,1.0,IND,ok,203111.0,Orlando Johnson
 Bernard James,2012.0,68.0,Power Forward,203108.0,2013-14,-0.1,30.0,4.9,0.9,1.4,0.1,0.1,0.3,0.478,0.0,0.545,0.4,0.8,0.0,0.0,0.2,0.4,0.5,0.9,0.3,0.8,DAL,ok,203108.0,Bernard James
 Marcus Denmon,2012.0,69.0,Point Guard/Shooting Guard,202458.0,2012-13,-1.0,2.0,2.2,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,DAL,recovered:last_fuzzy,202458.0,Justin Dentmon
-Xavier Gibson,2012.0,70.0,Power Forward,1626780.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last_unique_wide_era,,
+Xavier Gibson,2012.0,70.0,Power Forward,1626780.0,2016-17,-4.9,17.0,13.6,6.2,1.3,1.5,0.5,0.0,0.368,0.333,0.724,2.1,5.6,0.9,2.6,1.2,1.7,0.1,1.2,1.2,1.2,DAL,recovered:last_unique_wide_era,1626780.0,Jonathan Gibson
 Herb Pope,2012.0,71.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 J'Covan Brown,2012.0,72.0,Point Guard/Shooting Guard,203913.0,2014-15,-6.7,19.0,29.9,11.9,1.9,2.1,0.6,0.1,0.412,0.371,0.753,3.7,8.9,1.2,3.3,3.4,4.5,0.2,1.7,1.7,1.7,LAL,recovered:last+initial,203913.0,Jabari Brown
 Leon Radosevic,2012.0,73.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
@@ -443,7 +443,7 @@ Myck Kabongo,2013.0,42.0,Point Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Erik Murphy,2013.0,43.0,Power Forward,203513.0,2013-14,-2.1,24.0,2.6,0.3,0.3,0.1,0.0,0.2,0.231,0.0,0.0,0.1,0.5,0.0,0.1,0.0,0.0,0.1,0.3,0.1,0.3,CHI,ok,203513.0,Erik Murphy
 Kenny Kadji,2013.0,44.0,Power Forward/Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Trevor Mbakwe,2013.0,45.0,Power Forward/Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
-Rodney Williams,2013.0,46.0,Small Forward,1627786.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:full_fuzzy,,
+Rodney Williams,2013.0,46.0,Small Forward,1627786.0,2017-18,-1.5,21.0,14.6,6.3,3.0,0.8,1.0,0.2,0.468,0.289,0.667,2.4,5.2,0.5,1.8,1.0,1.4,1.0,2.0,0.9,1.6,NYK,recovered:full_fuzzy,1627786.0,Troy Williams
 Bojan Dubljevic,2013.0,47.0,Power Forward/Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 DeShaun Thomas,2013.0,48.0,Small Forward/Power Forward,203519.0,2013-14,1.3,6.0,6.3,2.3,0.5,0.5,0.0,0.0,0.429,0.2,1.0,1.0,2.3,0.2,0.8,0.2,0.2,0.0,0.5,0.2,1.0,PHI,recovered:last_unique,203519.0,Adonis Thomas
 Ryan Kelly,2013.0,49.0,Power Forward,203527.0,2016-17,0.3,16.0,6.9,1.6,1.1,0.5,0.3,0.3,0.286,0.4,0.833,0.5,1.8,0.3,0.6,0.3,0.4,0.1,1.1,0.3,0.3,ATL,ok,203527.0,Ryan Kelly
@@ -491,7 +491,7 @@ Kevin Parrom,2013.0,90.0,Shooting Guard/Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,no
 Jack Cooley,2013.0,91.0,Power Forward,204022.0,2014-15,-0.3,16.0,5.4,1.7,1.6,0.1,0.4,0.2,0.409,0.0,0.429,0.6,1.4,0.0,0.0,0.6,1.3,0.6,0.9,0.2,1.4,UTA,ok,204022.0,Jack Cooley
 Joffrey Lauvergne,2013.0,92.0,Power Forward/Center,203530.0,2017-18,-1.2,55.0,9.7,4.1,3.1,0.7,0.2,0.1,0.516,0.0,0.638,1.8,3.5,0.0,0.1,0.5,0.9,1.1,2.0,0.6,0.8,SAS,ok,203530.0,Joffrey Lauvergne
 Durand Scott,2013.0,93.0,Shooting Guard,203118.0,2015-16,1.5,75.0,15.3,6.2,2.7,1.0,0.3,0.2,0.468,0.392,0.794,2.3,5.0,0.8,2.1,0.7,0.8,0.7,2.0,0.6,1.4,ATL,recovered:last_unique,203118.0,Mike Scott
-Christian Watford,2013.0,94.0,Small Forward,1626174.0,2015-16,-2.9,17.0,8.5,3.6,2.2,0.2,0.3,0.4,0.415,0.364,0.619,1.3,3.1,0.2,0.6,0.8,1.2,0.8,1.5,0.1,0.6,PHI,recovered:full_fuzzy,1626174.0,Christian Wood
+Christian Watford,2013.0,94.0,Small Forward,1626174.0,2016-17,1.5,13.0,8.2,2.7,2.2,0.2,0.2,0.5,0.522,0.0,0.733,0.9,1.8,0.0,0.4,0.8,1.2,1.1,1.2,0.5,0.8,CHA,recovered:full_fuzzy,1626174.0,Christian Wood
 Brandon Triche,2013.0,95.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Elijah Johnson,2013.0,96.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Kenny Boynton,2013.0,97.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
@@ -546,15 +546,15 @@ Mitch McGary,2014.0,45.0,Center,203956.0,2014-15,1.5,32.0,15.2,6.3,5.2,0.4,0.5,0
 Jabari Brown,2014.0,46.0,Shooting Guard,203913.0,2014-15,-6.7,19.0,29.9,11.9,1.9,2.1,0.6,0.1,0.412,0.371,0.753,3.7,8.9,1.2,3.3,3.4,4.5,0.2,1.7,1.7,1.7,LAL,ok,203913.0,Jabari Brown
 James McAdoo,2014.0,47.0,Power Forward,203949.0,2014-15,0.6,15.0,9.1,4.1,2.5,0.1,0.3,0.6,0.545,0.0,0.56,1.6,2.9,0.0,0.0,0.9,1.7,1.0,1.5,0.4,1.4,GSW,recovered:last_unique,203949.0,James Michael McAdoo
 Cameron Bairstow,2014.0,48.0,Power Forward,203946.0,2015-16,-0.4,18.0,5.7,1.9,1.6,0.3,0.1,0.2,0.325,0.2,0.875,0.7,2.2,0.1,0.3,0.4,0.4,0.2,1.3,0.2,1.1,DET,ok,203946.0,Cameron Bairstow
-Deonte Burton NV,2014.0,49.0,Point Guard/Shooting Guard,1629126.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:full_fuzzy_wide_era,,
+Deonte Burton NV,2014.0,49.0,Point Guard/Shooting Guard,1629126.0,2018-19,0.8,32.0,7.5,2.6,0.9,0.3,0.2,0.3,0.402,0.296,0.667,1.0,2.6,0.3,0.8,0.3,0.4,0.1,0.8,0.3,1.0,OKC,recovered:full_fuzzy_wide_era,1629126.0,Deonte Burton
 CJ Fair,2014.0,50.0,Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Cory Jefferson,2014.0,51.0,Power Forward,203928.0,2014-15,1.5,50.0,10.6,3.7,2.9,0.3,0.2,0.4,0.449,0.133,0.574,1.5,3.3,0.0,0.3,0.6,1.1,0.9,2.0,0.4,1.2,BKN,ok,203928.0,Cory Jefferson
-Alec Brown,2014.0,52.0,Power Forward/Center,1626148.0,2016-17,0.4,11.0,14.5,3.9,3.0,0.7,0.5,0.1,0.36,0.259,0.0,1.6,4.5,0.6,2.5,0.0,0.0,0.7,2.3,0.5,1.4,ORL,recovered:last+initial,1626148.0,Anthony Brown
+Alec Brown,2014.0,52.0,Power Forward/Center,1626148.0,2017-18,3.0,1.0,3.7,3.0,0.0,1.0,0.0,0.0,1.0,1.0,0.0,1.0,1.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,MIN,recovered:last+initial,1626148.0,Anthony Brown
 Alessandro Gentile,2014.0,53.0,Shooting Guard/Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Artem Klimenko,2014.0,54.0,Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Nemanja Dangubic,2014.0,55.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Ronald Roberts,2014.0,56.0,Power Forward,203148.0,2014-15,-1.2,72.0,18.5,6.7,1.5,2.3,0.5,0.1,0.389,0.321,0.892,2.4,6.3,0.9,2.7,0.9,1.0,0.2,1.3,0.8,1.0,CHA,recovered:last_unique_wide_era,203148.0,Brian Roberts
-DeAndre Kane,2014.0,57.0,Point Guard/Shooting Guard,1629028.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:full_fuzzy_wide_era,,
+DeAndre Kane,2014.0,57.0,Point Guard/Shooting Guard,1629028.0,2018-19,-5.4,71.0,30.7,16.3,10.3,1.8,0.9,0.9,0.585,0.0,0.746,7.2,12.3,0.0,0.1,2.0,2.7,3.1,7.1,1.8,2.9,PHX,recovered:full_fuzzy_wide_era,1629028.0,Deandre Ayton
 Tarik Black,2014.0,58.0,Power Forward/Center,204028.0,2015-16,0.5,39.0,12.7,3.4,4.0,0.4,0.4,0.5,0.548,0.0,0.422,1.5,2.7,0.0,0.0,0.5,1.2,1.1,2.9,0.6,2.0,LAL,ok,204028.0,Tarik Black
 Patric Young,2014.0,59.0,Power Forward/Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Juvonte Reddic,2014.0,60.0,Power Forward/Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
@@ -565,10 +565,10 @@ Andre Dawkins,2014.0,64.0,Shooting Guard,203958.0,2014-15,-1.0,4.0,5.4,0.8,0.5,0
 Ojars Silins,2014.0,65.0,Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Sean Kilpatrick,2014.0,66.0,Shooting Guard,203930.0,2014-15,4.3,4.0,17.9,5.5,1.5,1.0,0.8,0.0,0.35,0.308,1.0,1.8,5.0,1.0,3.3,1.0,1.0,0.3,1.3,0.5,0.8,MIN,ok,203930.0,Sean Kilpatrick
 Jahii Carson,2014.0,67.0,Point Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
-Kendall Williams,2014.0,68.0,Point Guard,1629026.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last+initial_wide_era,,
+Kendall Williams,2014.0,68.0,Point Guard,1629026.0,2018-19,-1.9,46.0,23.5,6.1,4.8,1.8,1.0,0.4,0.384,0.333,0.684,2.3,6.1,1.1,3.4,0.3,0.4,1.2,3.6,0.8,2.1,NOP,recovered:last+initial_wide_era,1629026.0,Kenrich Williams
 Roy Devyn Marble,2014.0,69.0,Shooting Guard,203906.0,2015-16,-0.5,28.0,8.9,2.1,1.4,0.4,0.5,0.0,0.296,0.25,0.417,0.8,2.5,0.3,1.1,0.4,0.9,0.2,1.1,0.3,0.9,ORL,recovered:last_unique,203906.0,Devyn Marble
 Keith Appling,2014.0,70.0,Point Guard/Shooting Guard,203951.0,2015-16,2.8,5.0,5.4,1.2,0.2,0.2,0.2,0.0,0.25,0.0,1.0,0.4,1.6,0.0,0.6,0.4,0.4,0.0,0.2,0.6,1.0,ORL,ok,203951.0,Keith Appling
-Xavier Thames,2014.0,71.0,Point Guard/Shooting Guard,1628504.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:full_fuzzy,,
+Xavier Thames,2014.0,71.0,Point Guard/Shooting Guard,1628504.0,2017-18,-11.8,5.0,23.6,5.8,1.0,3.6,1.2,0.6,0.286,0.071,0.444,2.4,8.4,0.2,2.8,0.8,1.8,0.0,1.0,2.2,3.6,MEM,recovered:full_fuzzy,1628504.0,Xavier Rathan-Mayes
 Cristiano Felicio,2014.0,72.0,Power Forward/Center,1626245.0,2015-16,1.7,31.0,10.3,3.4,3.3,0.8,0.2,0.4,0.556,0.0,0.714,1.3,2.3,0.0,0.1,0.8,1.1,1.0,2.3,0.4,1.0,CHI,ok,1626245.0,Cristiano Felicio
 Jordan Bachynski,2014.0,73.0,Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Casey Prather,2014.0,74.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
@@ -592,7 +592,7 @@ Cameron Clark,2014.0,91.0,Small Forward,203546.0,2016-17,0.5,77.0,14.8,6.8,1.6,1
 Talib Zanna,2014.0,92.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Devin Oliver,2014.0,93.0,Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Sim Bhullar,2014.0,94.0,Center,204021.0,2014-15,0.3,3.0,0.9,0.7,0.3,0.3,0.0,0.3,0.5,0.0,0.0,0.3,0.7,0.0,0.0,0.0,0.0,0.0,0.3,0.0,0.0,SAC,ok,204021.0,Sim Bhullar
-Joe Jackson,2014.0,95.0,Point Guard,1628367.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:full_fuzzy,,
+Joe Jackson,2014.0,95.0,Point Guard,1628367.0,2018-19,-5.4,79.0,25.2,11.5,4.4,2.3,0.9,0.7,0.413,0.324,0.671,4.4,10.6,0.9,2.8,1.8,2.7,0.8,3.6,2.2,2.6,PHX,recovered:full_fuzzy,1628367.0,Josh Jackson
 Roberto Nelson,2014.0,96.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Aaron Craft,2014.0,97.0,Point Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Bryce Cotton,2014.0,98.0,Point Guard,203955.0,2014-15,0.0,15.0,10.6,5.3,1.2,1.0,0.3,0.0,0.42,0.35,0.833,1.9,4.6,0.5,1.3,1.0,1.2,0.2,1.0,0.8,0.4,UTA,ok,203955.0,Bryce Cotton
@@ -637,7 +637,7 @@ Cedi Osman,2015.0,36.0,Small Forward,1626224.0,2017-18,0.6,61.0,11.0,3.9,2.0,0.7
 Cliff Alexander,2015.0,37.0,Power Forward/Center,1626146.0,2015-16,-1.6,8.0,4.5,1.3,0.8,0.0,0.1,0.3,0.5,0.0,0.0,0.6,1.3,0.0,0.0,0.0,0.0,0.3,0.5,0.1,0.1,POR,ok,1626146.0,Cliff Alexander
 Christian Wood,2015.0,38.0,Power Forward,1626174.0,2016-17,1.5,13.0,8.2,2.7,2.2,0.2,0.2,0.5,0.522,0.0,0.733,0.9,1.8,0.0,0.4,0.8,1.2,1.1,1.2,0.5,0.8,CHA,ok,1626174.0,Christian Wood
 Terran Petteway,2015.0,39.0,Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
-Jonathan Holmes,2015.0,40.0,Power Forward,1626158.0,2017-18,-0.8,48.0,15.5,6.5,4.4,1.3,0.4,0.6,0.56,0.129,0.661,2.8,5.0,0.1,0.6,0.8,1.2,1.2,3.2,0.5,2.0,PHI,recovered:last_unique,1626158.0,Richaun Holmes
+Jonathan Holmes,2015.0,40.0,Power Forward,1626158.0,2019-20,0.4,44.0,28.2,12.3,8.1,1.0,0.9,1.3,0.648,0.0,0.788,5.1,7.8,0.0,0.0,2.1,2.7,2.9,5.3,1.2,3.8,SAC,recovered:last_unique,1626158.0,Richaun Holmes
 Dakari Johnson,2015.0,41.0,Center,1626177.0,2017-18,1.1,31.0,5.2,1.8,1.1,0.3,0.2,0.3,0.564,0.0,0.55,0.7,1.3,0.0,0.0,0.4,0.6,0.5,0.6,0.1,0.9,OKC,ok,1626177.0,Dakari Johnson
 Luis Montero,2015.0,42.0,Shooting Guard/Small Forward,1626242.0,2017-18,-2.5,2.0,4.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.5,0.0,0.0,0.0,0.0,0.0,1.0,1.0,0.0,DET,ok,1626242.0,Luis Montero
 Nikola Milutinov,2015.0,43.0,Power Forward/Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
@@ -664,13 +664,13 @@ Juwan Staten,2015.0,63.0,Point Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Treveon Graham,2015.0,64.0,Shooting Guard,1626203.0,2018-19,0.8,35.0,20.4,5.3,3.1,1.0,0.4,0.2,0.335,0.297,0.818,1.8,5.5,1.1,3.7,0.5,0.6,0.7,2.4,0.5,1.9,BKN,ok,1626203.0,Treveon Graham
 Luka Mitrovic,2015.0,65.0,Small Forward/Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Kevin Pangos,2015.0,66.0,Point Guard,1630698.0,,,,,,,,,,,,,,,,,,,,,,,,no_data_in_2015-16_to_2019-20,,
-Jarvis Williams,2015.0,67.0,Power Forward,1629140.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last+initial,,
+Jarvis Williams,2015.0,67.0,Power Forward,1629140.0,2018-19,2.3,24.0,15.5,6.5,4.1,0.5,0.3,0.3,0.591,0.0,0.563,2.7,4.6,0.0,0.1,1.1,2.0,2.0,2.1,0.7,2.6,LAL,recovered:last+initial,1629140.0,Johnathan Williams
 LeBryan Nash,2015.0,68.0,Small Forward/Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Michael Qualls,2015.0,69.0,Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Aaron Harrison,2015.0,70.0,Shooting Guard,1626151.0,2015-16,-0.3,21.0,4.4,0.9,0.7,0.1,0.3,0.0,0.263,0.3,0.417,0.2,0.9,0.1,0.5,0.2,0.6,0.2,0.5,0.2,0.5,CHA,ok,1626151.0,Aaron Harrison
-Tashawn Thomas,2015.0,71.0,Power Forward,1629017.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last_unique,,
+Tashawn Thomas,2015.0,71.0,Power Forward,1629017.0,2018-19,-1.3,26.0,7.5,2.3,0.8,0.3,0.3,0.2,0.319,0.286,0.636,0.8,2.7,0.4,1.3,0.3,0.4,0.2,0.6,0.2,0.8,DET,recovered:last_unique,1629017.0,Khyri Thomas
 Tyler Harvey,2015.0,72.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
-TJ McConnell,2015.0,73.0,Point Guard,204456.0,2017-18,-0.9,76.0,22.5,6.3,3.0,4.0,1.2,0.2,0.499,0.435,0.795,2.8,5.5,0.4,0.8,0.4,0.5,0.5,2.5,1.5,1.6,PHI,recovered:last_unique,204456.0,T.J. McConnell
+TJ McConnell,2015.0,73.0,Point Guard,204456.0,2019-20,0.7,71.0,18.7,6.5,2.7,5.0,0.8,0.2,0.516,0.294,0.833,3.0,5.8,0.1,0.2,0.5,0.6,0.5,2.1,1.4,1.0,IND,recovered:last_unique,204456.0,T.J. McConnell
 Daniel Diez,2015.0,74.0,Small Forward/Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Dez Wells,2015.0,75.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Chris Walker,2015.0,76.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
@@ -691,7 +691,7 @@ Ralston Turner,2015.0,90.0,Shooting Guard,1626167.0,2016-17,1.8,81.0,31.4,14.5,7
 Marcus Thornton WM,2015.0,91.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Trevor Lacey,2015.0,92.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Marcus Eriksson,2015.0,93.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
-Askia Booker,2015.0,94.0,Point Guard,1626164.0,2016-17,-2.9,78.0,35.0,22.1,3.2,3.4,0.9,0.3,0.423,0.363,0.832,7.8,18.3,1.9,5.2,4.7,5.7,0.6,2.6,3.1,3.1,PHX,recovered:last_unique,1626164.0,Devin Booker
+Askia Booker,2015.0,94.0,Point Guard,1626164.0,2019-20,1.9,70.0,35.9,26.6,4.2,6.5,0.7,0.3,0.489,0.354,0.919,9.0,18.3,2.0,5.7,6.7,7.3,0.4,3.8,3.8,3.0,PHX,recovered:last_unique,1626164.0,Devin Booker
 Derrick Marks,2015.0,95.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 David Kravish,2015.0,96.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Juan Vaulet,2015.0,97.0,Shooting Guard/Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
@@ -727,7 +727,7 @@ Thon Maker,2016.0,26.0,Power Forward/Center,1627748.0,2018-19,-0.1,64.0,15.2,5.0
 Taurean Prince,2016.0,27.0,Small Forward,1627752.0,2019-20,1.1,64.0,29.0,12.1,6.0,1.8,0.9,0.4,0.376,0.339,0.798,4.3,11.5,2.3,6.7,1.1,1.4,0.8,5.2,2.0,2.5,BKN,ok,1627752.0,Taurean Prince
 Juan Hernangomez,2016.0,28.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Stephen Zimmerman,2016.0,29.0,Power Forward/Center,1627757.0,2016-17,-2.1,19.0,5.7,1.2,1.8,0.2,0.1,0.3,0.323,0.0,0.6,0.5,1.6,0.0,0.0,0.2,0.3,0.6,1.3,0.2,0.9,ORL,ok,1627757.0,Stephen Zimmerman
-DeAndre Bembry,2016.0,30.0,Shooting Guard/Small Forward,1627761.0,2016-17,-1.2,38.0,9.8,2.7,1.6,0.7,0.2,0.1,0.48,0.056,0.375,1.2,2.6,0.0,0.5,0.2,0.4,0.4,1.2,0.4,0.6,ATL,recovered:last_unique,1627761.0,DeAndre' Bembry
+DeAndre Bembry,2016.0,30.0,Shooting Guard/Small Forward,1627761.0,2020-21,0.1,51.0,19.1,5.7,2.9,2.1,1.0,0.4,0.513,0.264,0.682,2.3,4.5,0.3,1.0,0.9,1.3,0.6,2.2,1.4,1.7,TOR,recovered:last_unique,1627761.0,DeAndre' Bembry
 Ante Zizic,2016.0,31.0,Center,1627790.0,2019-20,0.6,22.0,10.0,4.4,3.0,0.3,0.3,0.2,0.569,0.0,0.737,1.9,3.3,0.0,0.0,0.6,0.9,0.8,2.2,0.5,1.2,CLE,ok,1627790.0,Ante Zizic
 Timothe Luwawu,2016.0,32.0,Shooting Guard/Small Forward,1627789.0,2017-18,-0.1,52.0,15.5,5.8,1.4,1.0,0.2,0.1,0.375,0.335,0.793,1.9,5.1,1.0,3.0,0.9,1.1,0.3,1.1,0.7,1.9,PHI,ok,1627789.0,Timothe Luwawu-Cabarrot
 Wade Baldwin,2016.0,33.0,Point Guard/Shooting Guard,1627735.0,2017-18,0.7,7.0,11.5,5.4,1.1,0.7,0.3,0.1,0.667,0.8,0.6,2.0,3.0,0.6,0.7,0.9,1.4,0.1,1.0,0.6,1.7,POR,ok,1627735.0,Wade Baldwin IV
@@ -768,7 +768,7 @@ Gracin Bakumanya,2016.0,67.0,Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Marcus Paige,2016.0,68.0,Point Guard,1627779.0,2017-18,1.6,5.0,5.6,2.4,0.8,0.6,0.0,0.0,0.286,0.25,1.0,0.8,2.8,0.4,1.6,0.4,0.4,0.0,0.8,0.0,0.0,CHA,ok,1627779.0,Marcus Paige
 Kyle Wiltjer,2016.0,69.0,Power Forward,1627787.0,2016-17,-2.7,14.0,3.1,0.9,0.7,0.1,0.2,0.1,0.286,0.308,0.5,0.3,1.0,0.3,0.9,0.1,0.1,0.3,0.4,0.4,0.3,HOU,ok,1627787.0,Kyle Wiltjer
 Isaiah Taylor,2016.0,70.0,Point Guard,1627819.0,2017-18,-0.5,67.0,17.4,6.6,1.4,3.1,0.5,0.1,0.418,0.25,0.702,2.4,5.8,0.3,1.2,1.5,2.1,0.3,1.1,1.3,1.7,ATL,ok,1627819.0,Isaiah Taylor
-Robert Carter,2016.0,71.0,Power Forward,1628975.0,2018-19,-2.3,39.0,14.8,4.4,1.7,1.8,0.7,0.3,0.303,0.333,0.813,1.4,4.7,0.9,2.6,0.7,0.8,0.4,1.3,0.8,1.4,MEM,recovered:last_unique,1628975.0,Jevon Carter
+Robert Carter,2016.0,71.0,Power Forward,1628975.0,2020-21,0.5,60.0,11.9,4.1,1.5,1.2,0.5,0.2,0.422,0.371,0.571,1.6,3.7,0.9,2.5,0.1,0.1,0.3,1.3,0.3,0.9,PHX,recovered:last_unique,1628975.0,Jevon Carter
 Sheldon McClellan,2016.0,72.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Alex Poythress,2016.0,73.0,Power Forward,1627816.0,2017-18,-0.8,25.0,4.2,1.0,0.7,0.1,0.1,0.0,0.423,0.364,0.0,0.4,1.0,0.2,0.4,0.0,0.0,0.3,0.4,0.1,0.6,IND,ok,1627816.0,Alex Poythress
 Jake Layman,2016.0,74.0,Small Forward,1627774.0,2018-19,1.0,71.0,18.7,7.6,3.1,0.7,0.4,0.4,0.509,0.326,0.704,3.0,6.0,0.8,2.5,0.7,1.0,0.8,2.3,0.6,1.6,POR,ok,1627774.0,Jake Layman
@@ -794,7 +794,7 @@ Tyler Harris Auburn,2016.0,93.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_
 Andrew Andrews,2016.0,94.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Prince Ibeh,2016.0,95.0,Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Stefan Jankovic,2016.0,96.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
-Brannen Greene,2016.0,97.0,Shooting Guard/Small Forward,1629750.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last_fuzzy,,
+Brannen Greene,2016.0,97.0,Shooting Guard/Small Forward,1629750.0,2020-21,0.4,41.0,11.6,3.6,1.7,0.4,0.7,0.1,0.52,0.333,0.75,1.3,2.5,0.2,0.7,0.7,1.0,0.6,1.1,0.5,1.1,CHI,recovered:last_fuzzy,1629750.0,Javonte Green
 D'Vauntes Smith-Rivera,2016.0,98.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Goodluck Okonoboh,2016.0,99.0,Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Emmanuel Malou,2016.0,100.0,Small Forward/Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
@@ -821,7 +821,7 @@ Justin Jackson,2017.0,20.0,Small Forward,1628382.0,2019-20,0.1,65.0,16.1,5.5,2.4
 Harry Giles,2017.0,21.0,Power Forward/Center,1628385.0,2018-19,-1.8,58.0,14.1,7.0,3.8,1.5,0.5,0.4,0.503,0.0,0.637,3.0,6.0,0.0,0.1,1.0,1.6,1.1,2.7,1.3,2.6,SAC,ok,1628385.0,Harry Giles III
 Justin Patton,2017.0,22.0,Center,1628383.0,2017-18,3.0,1.0,3.7,2.0,0.0,0.0,1.0,0.0,0.5,0.0,0.0,1.0,2.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,MIN,ok,1628383.0,Justin Patton
 Terrance Ferguson,2017.0,23.0,Shooting Guard,1628390.0,2018-19,1.9,74.0,26.1,6.9,1.9,1.0,0.5,0.2,0.429,0.366,0.725,2.5,5.8,1.4,3.9,0.5,0.7,0.4,1.5,0.6,3.1,OKC,ok,1628390.0,Terrance Ferguson
-Cam Oliver,2017.0,24.0,Power Forward,1628419.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last_unique,,
+Cam Oliver,2017.0,24.0,Power Forward,1628419.0,2021-22,-1.0,2.0,21.7,11.5,3.0,1.5,0.5,0.5,0.667,0.333,0.667,5.0,7.5,0.5,1.5,1.0,1.5,1.0,2.0,0.0,2.5,ATL,recovered:last_unique,1628419.0,Cameron Oliver
 Wesley Iwundu,2017.0,25.0,Shooting Guard/Small Forward,1628411.0,2018-19,0.5,68.0,18.1,5.0,2.7,1.1,0.4,0.3,0.412,0.367,0.816,1.7,4.0,0.4,1.2,1.2,1.5,0.5,2.2,0.6,1.8,ORL,recovered:last_unique,1628411.0,Wes Iwundu
 Jawun Evans,2017.0,26.0,Point Guard,1628393.0,2017-18,0.2,48.0,16.2,4.8,1.8,2.1,0.8,0.1,0.352,0.278,0.776,1.9,5.3,0.3,1.1,0.8,1.0,0.2,1.6,0.9,2.0,LAC,ok,1628393.0,Jawun Evans
 Jordan Bell,2017.0,27.0,Power Forward/Center,1628395.0,2017-18,2.8,57.0,14.2,4.6,3.6,1.8,0.6,1.0,0.627,0.0,0.682,2.0,3.2,0.0,0.1,0.5,0.8,1.1,2.6,0.9,1.6,GSW,ok,1628395.0,Jordan Bell
@@ -945,7 +945,7 @@ Isaac Bonga,2018.0,44.0,Small Forward,1629067.0,2018-19,0.6,22.0,5.5,0.9,1.1,0.7
 Alize Johnson,2018.0,45.0,Power Forward,1628993.0,2022-23,3.0,4.0,7.4,1.8,2.5,0.3,0.3,0.0,0.5,0.0,0.5,0.8,1.5,0.0,0.5,0.3,0.5,0.5,2.0,1.0,0.8,SAS,ok,1628993.0,Alize Johnson
 Chimezie Metu,2018.0,46.0,Power Forward/Center,1629002.0,2022-23,1.3,66.0,10.4,4.9,3.0,0.6,0.3,0.3,0.589,0.237,0.74,2.0,3.3,0.1,0.6,0.8,1.1,0.7,2.3,0.5,1.2,SAC,ok,1629002.0,Chimezie Metu
 Raymond Spalding,2018.0,47.0,Power Forward,1629034.0,2018-19,-1.5,14.0,10.5,3.9,3.4,0.4,0.6,0.6,0.532,0.0,0.333,1.8,3.4,0.0,0.2,0.3,0.9,1.1,2.4,0.6,1.6,PHX,recovered:last_unique,1629034.0,Ray Spalding
-Sviatoslav Mykhailiuk,2018.0,48.0,Shooting Guard,1629004.0,2019-20,-0.1,56.0,22.6,9.0,1.9,1.9,0.7,0.1,0.41,0.404,0.814,3.0,7.2,2.1,5.1,1.0,1.3,0.3,1.6,1.1,1.6,DET,recovered:last_unique,1629004.0,Svi Mykhailiuk
+Sviatoslav Mykhailiuk,2018.0,48.0,Shooting Guard,1629004.0,2022-23,0.6,32.0,14.6,6.9,1.7,1.7,0.5,0.1,0.445,0.424,0.667,2.4,5.4,1.3,3.1,0.8,1.2,0.5,1.2,0.8,0.7,CHA,recovered:last_unique,1629004.0,Svi Mykhailiuk
 Keenan Evans,2018.0,49.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Rodions Kurucs,2018.0,50.0,Small Forward,1629066.0,2018-19,0.0,63.0,20.5,8.5,3.9,0.8,0.7,0.4,0.45,0.315,0.783,3.2,7.1,0.9,2.9,1.1,1.5,0.9,3.0,1.2,2.3,BKN,ok,1629066.0,Rodions Kurucs
 Arnoldas Kulboka,2018.0,51.0,Small Forward,1629083.0,2021-22,-6.0,2.0,2.7,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.5,0.0,0.5,0.0,0.0,0.0,0.0,0.0,0.5,CHA,ok,1629083.0,Arnoldas Kulboka
@@ -993,7 +993,7 @@ Jared Terrell,2018.0,92.0,Shooting Guard,1629123.0,2018-19,-1.9,14.0,7.9,2.2,0.4
 Marcus Foster,2018.0,93.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Muhammad-Ali Abdur-Rahkman,2018.0,94.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Trevon Bluiett,2018.0,95.0,Shooting Guard,1629129.0,,,,,,,,,,,,,,,,,,,,,,,,no_data_in_2018-19_to_2022-23,,
-Kyle Washington,2018.0,96.0,Power Forward,1629023.0,2020-21,0.5,64.0,30.5,12.9,6.5,2.5,1.1,1.2,0.44,0.386,0.745,4.7,10.7,1.8,4.5,1.7,2.3,1.5,5.1,2.0,2.7,CHA,recovered:last_unique,1629023.0,P.J. Washington
+Kyle Washington,2018.0,96.0,Power Forward,1629023.0,2021-22,2.2,65.0,27.2,10.3,5.2,2.3,0.9,0.9,0.47,0.365,0.716,3.8,8.2,1.7,4.6,0.9,1.2,1.3,3.9,1.3,2.3,CHA,recovered:last_unique,1629023.0,P.J. Washington
 Chris Chiozza,2018.0,97.0,Point Guard,1629185.0,2019-20,3.3,28.0,14.3,5.1,1.9,3.0,0.8,0.1,0.393,0.375,1.0,2.0,5.0,1.0,2.6,0.2,0.2,0.3,1.6,1.1,1.3,BKN,ok,1629185.0,Chris Chiozza
 Anas Mahmoud,2018.0,98.0,Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Jock Landale,2018.0,99.0,Center,1629111.0,2022-23,2.0,69.0,14.2,6.6,4.1,1.0,0.2,0.4,0.528,0.25,0.752,2.6,4.9,0.3,1.2,1.1,1.5,1.7,2.3,0.9,1.8,PHX,ok,1629111.0,Jock Landale
@@ -1013,7 +1013,7 @@ Jarrett Culver,2019.0,12.0,Shooting Guard,1629633.0,2021-22,-0.5,37.0,9.1,3.5,1.
 Mfiondu Kabengele,2019.0,13.0,Power Forward/Center,1629662.0,2019-20,-0.1,12.0,5.4,3.5,0.9,0.2,0.2,0.2,0.438,0.45,1.0,1.2,2.7,0.8,1.7,0.4,0.4,0.1,0.8,0.2,0.8,LAC,ok,1629662.0,Mfiondu Kabengele
 Goga Bitadze,2019.0,14.0,Center,1629048.0,2022-23,0.7,38.0,12.0,4.4,3.6,1.0,0.4,0.7,0.552,0.231,0.548,1.8,3.3,0.2,0.7,0.6,1.1,1.6,2.0,0.6,1.7,ORL,ok,1629048.0,Goga Bitadze
 Matisse Thybulle,2019.0,15.0,Shooting Guard/Small Forward,1629680.0,2020-21,1.5,65.0,20.0,3.9,1.9,1.0,1.6,1.1,0.42,0.301,0.444,1.6,3.7,0.7,2.2,0.1,0.3,0.5,1.4,0.5,2.0,PHI,ok,1629680.0,Matisse Thybulle
-Cameron Reddish,2019.0,16.0,Shooting Guard/Small Forward,1629629.0,2020-21,-1.9,26.0,28.9,11.2,4.0,1.3,1.3,0.3,0.365,0.262,0.817,3.7,10.1,1.3,4.8,2.6,3.2,0.8,3.2,1.3,2.6,ATL,recovered:last_unique,1629629.0,Cam Reddish
+Cameron Reddish,2019.0,16.0,Shooting Guard/Small Forward,1629629.0,2023-24,-1.0,48.0,20.5,5.4,2.1,1.0,1.0,0.3,0.389,0.336,0.759,1.9,4.9,0.8,2.3,0.9,1.1,0.6,1.5,0.6,1.3,LAL,recovered:last_unique,1629629.0,Cam Reddish
 Sekou Doumbouya,2019.0,17.0,Small Forward/Power Forward,1629635.0,2021-22,12.0,2.0,8.2,7.0,3.0,0.0,1.5,1.0,0.625,0.5,0.75,2.5,4.0,0.5,1.0,1.5,2.0,1.0,2.0,1.0,0.5,LAL,ok,1629635.0,Sekou Doumbouya
 Romeo Langford,2019.0,18.0,Shooting Guard,1629641.0,2019-20,2.1,32.0,11.6,2.5,1.3,0.4,0.3,0.3,0.35,0.185,0.72,0.9,2.5,0.2,0.8,0.6,0.8,0.5,0.8,0.3,1.0,BOS,ok,1629641.0,Romeo Langford
 Nickeil Alexander-Walker,2019.0,19.0,Shooting Guard,1629638.0,2023-24,3.8,82.0,23.4,8.0,2.0,2.5,0.8,0.5,0.439,0.391,0.8,2.9,6.6,1.6,4.1,0.6,0.8,0.4,1.6,0.9,1.7,MIN,ok,1629638.0,Nickeil Alexander-Walker
@@ -1091,7 +1091,7 @@ Charles Matthews,2019.0,90.0,Shooting Guard,1629726.0,2019-20,1.9,18.0,12.6,5.4,
 Matur Maker,2019.0,91.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Christ Koumadje,2019.0,92.0,Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Donta Hall,2019.0,93.0,Center,1629743.0,2020-21,-1.5,13.0,13.8,5.6,4.8,0.8,0.4,0.8,0.714,0.0,0.676,1.9,2.7,0.0,0.0,1.8,2.6,1.8,2.9,0.6,1.4,ORL,ok,1629743.0,Donta Hall
-Dedric Lawson,2019.0,94.0,Power Forward,1630639.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last_unique,,
+Dedric Lawson,2019.0,94.0,Power Forward,1630639.0,2023-24,0.4,42.0,7.4,3.2,1.2,0.5,0.2,0.1,0.446,0.26,0.652,1.3,2.9,0.3,1.2,0.4,0.5,0.3,0.9,0.3,0.5,DAL,recovered:last_unique,1630639.0,A.J. Lawson
 Bennie Boatwright,2019.0,95.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 CJ Massinburg,2019.0,96.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Cody Martin,2019.0,97.0,Shooting Guard,1628998.0,2020-21,-0.1,52.0,16.3,4.0,3.1,1.7,0.7,0.2,0.441,0.276,0.581,1.6,3.6,0.3,1.1,0.5,0.8,1.0,2.1,0.8,1.0,CHA,ok,1628998.0,Cody Martin
@@ -1196,7 +1196,7 @@ Sam Merrill,2020.0,96.0,Shooting Guard,1630241.0,2024-25,4.5,71.0,19.7,7.2,2.2,1
 Trevelin Queen,2020.0,97.0,Shooting Guard,1630243.0,2022-23,2.0,7.0,10.0,3.0,2.4,0.9,0.3,0.7,0.241,0.133,1.0,1.0,4.1,0.3,2.1,0.7,0.7,1.1,1.3,1.0,0.6,PHI,ok,1630243.0,Trevelin Queen
 Nathan Knight,2020.0,98.0,Center,1630233.0,2021-22,0.6,37.0,7.2,3.7,2.3,0.6,0.2,0.2,0.511,0.308,0.733,1.2,2.4,0.1,0.4,1.2,1.6,0.9,1.4,0.5,1.1,MIN,ok,1630233.0,Nathan Knight
 Anthony Lamb,2020.0,99.0,Small Forward/Power Forward,1630237.0,2021-22,2.5,2.0,3.8,0.0,0.5,1.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,1.0,0.0,0.0,0.0,0.5,0.0,0.0,HOU,ok,1630237.0,Anthony Lamb
-Alpha Diallo,2020.0,100.0,Shooting Guard/Small Forward,1628977.0,2022-23,-0.3,56.0,17.8,9.3,3.5,1.0,0.9,0.3,0.573,0.238,0.588,3.8,6.7,0.1,0.4,1.6,2.6,1.0,2.4,1.3,2.2,DET,recovered:last_unique_wide_era,1628977.0,Hamidou Diallo
+Alpha Diallo,2020.0,100.0,Shooting Guard/Small Forward,1628977.0,2023-24,2.0,2.0,2.4,1.0,1.0,0.5,1.0,0.0,0.5,0.0,0.0,0.5,1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.5,0.5,WAS,recovered:last_unique_wide_era,1628977.0,Hamidou Diallo
 Cade Cunningham,2021.0,1.0,Point Guard/Shooting Guard,1630595.0,2025-26,8.1,64.0,33.9,23.9,5.5,9.9,1.4,0.8,0.461,0.342,0.812,8.6,18.6,2.0,5.7,4.8,6.0,0.9,4.7,3.7,3.1,DET,ok,1630595.0,Cade Cunningham
 Evan Mobley,2021.0,2.0,Power Forward/Center,1630596.0,2024-25,7.7,71.0,30.5,18.5,9.3,3.2,0.9,1.6,0.557,0.37,0.725,7.1,12.8,1.2,3.2,3.1,4.3,2.3,7.0,2.0,2.0,CLE,ok,1630596.0,Evan Mobley
 Jalen Suggs,2021.0,3.0,Point Guard,1630591.0,2025-26,3.2,57.0,27.6,13.8,3.9,5.5,1.8,0.7,0.435,0.339,0.855,4.9,11.4,2.1,6.3,1.8,2.1,0.6,3.2,2.7,2.5,ORL,ok,1630591.0,Jalen Suggs
@@ -1217,7 +1217,7 @@ Jalen Johnson,2021.0,17.0,Small Forward/Power Forward,1630552.0,2025-26,2.6,72.0
 Alperen Sengun,2021.0,18.0,Power Forward/Center,1630578.0,2024-25,5.4,76.0,31.5,19.1,10.3,4.9,1.1,0.8,0.496,0.233,0.692,7.5,15.0,0.3,1.2,3.9,5.6,3.4,6.9,2.6,2.8,HOU,ok,1630578.0,Alperen Sengun
 Joshua Primo,2021.0,19.0,Shooting Guard,1630563.0,2022-23,-0.5,4.0,23.3,7.0,3.3,4.5,0.3,0.5,0.346,0.25,0.778,2.3,6.5,0.8,3.0,1.8,2.3,0.5,2.8,2.8,2.0,SAS,ok,1630563.0,Joshua Primo
 Miles McBride,2021.0,20.0,Point Guard,1630540.0,2025-26,5.5,41.0,26.3,12.0,2.4,2.6,0.9,0.2,0.423,0.413,0.787,4.2,9.9,2.7,6.6,0.9,1.1,0.6,1.9,0.8,1.7,NYK,ok,1630540.0,Miles McBride
-Nah'Shon Hyland,2021.0,21.0,Point Guard/Shooting Guard,1630538.0,2021-22,0.6,69.0,19.0,10.1,2.7,2.8,0.6,0.3,0.403,0.366,0.856,3.3,8.3,1.9,5.2,1.6,1.8,0.2,2.5,1.2,2.2,DEN,recovered:last_unique,1630538.0,Bones Hyland
+Nah'Shon Hyland,2021.0,21.0,Point Guard/Shooting Guard,1630538.0,2025-26,1.7,71.0,16.6,8.5,1.8,2.6,0.6,0.2,0.453,0.388,0.78,3.0,6.6,1.6,4.2,0.9,1.2,0.3,1.5,1.0,1.7,MIN,recovered:last_unique,1630538.0,Bones Hyland
 Chris Duarte,2021.0,22.0,Shooting Guard,1630537.0,2024-25,0.7,17.0,4.4,2.1,1.2,0.5,0.0,0.0,0.462,0.4,0.75,0.7,1.5,0.4,0.9,0.4,0.5,0.3,0.9,0.1,0.4,CHI,ok,1630537.0,Chris Duarte
 Cameron Thomas,2021.0,23.0,Shooting Guard,1630560.0,2022-23,-0.1,57.0,16.6,10.6,1.7,1.4,0.4,0.1,0.441,0.383,0.868,3.5,8.0,0.9,2.3,2.6,3.1,0.1,1.5,1.1,1.0,BKN,recovered:last+initial,1630560.0,Cam Thomas
 Ayo Dosunmu,2021.0,24.0,Point Guard/Shooting Guard,1630245.0,2022-23,-1.0,80.0,26.2,8.6,2.8,2.6,0.8,0.3,0.493,0.312,0.805,3.5,7.1,0.7,2.4,0.8,1.0,0.6,2.2,1.2,2.3,CHI,ok,1630245.0,Ayo Dosunmu
@@ -1261,7 +1261,7 @@ Kessler Edwards,2021.0,61.0,Power Forward,1630556.0,2022-23,0.1,36.0,10.7,2.8,1.
 Duane Washington Jr.,2021.0,62.0,Point Guard/Shooting Guard,1630613.0,2022-23,-0.2,31.0,12.7,7.9,1.2,2.0,0.2,0.1,0.367,0.36,0.667,3.0,8.3,1.3,3.6,0.5,0.8,0.1,1.1,1.1,0.7,NYK,ok,1630613.0,Duane Washington Jr.
 John Petty,2021.0,63.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Mac McClung,2021.0,64.0,Point Guard/Shooting Guard,1630644.0,2022-23,9.0,2.0,20.5,12.5,5.0,4.5,0.0,0.0,0.45,0.364,0.6,4.5,10.0,2.0,5.5,1.5,2.5,1.5,3.5,1.5,1.5,PHI,ok,1630644.0,Mac McClung
-RJ Nembhard,2021.0,65.0,Point Guard/Shooting Guard,1629614.0,2023-24,1.0,68.0,25.0,9.2,2.1,4.1,0.9,0.1,0.498,0.357,0.804,3.8,7.7,0.9,2.5,0.7,0.8,0.5,1.5,1.5,2.1,IND,recovered:last_unique,1629614.0,Andrew Nembhard
+RJ Nembhard,2021.0,65.0,Point Guard/Shooting Guard,1629614.0,2024-25,3.1,65.0,28.9,10.0,3.3,5.0,1.2,0.2,0.458,0.291,0.794,3.8,8.3,0.8,2.7,1.7,2.1,0.5,2.8,1.7,2.3,IND,recovered:last_unique,1629614.0,Andrew Nembhard
 Sam Hauser,2021.0,66.0,Small Forward,1630573.0,2023-24,6.2,79.0,22.0,9.0,3.5,1.0,0.5,0.3,0.446,0.424,0.895,3.2,7.1,2.5,5.9,0.2,0.2,0.6,2.9,0.4,1.3,BOS,ok,1630573.0,Sam Hauser
 Bryce Wills,2021.0,67.0,Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Marcus Garrett,2021.0,68.0,Point Guard/Shooting Guard,1630585.0,2021-22,1.4,12.0,10.7,1.1,1.9,0.6,0.4,0.3,0.238,0.25,0.4,0.4,1.8,0.1,0.3,0.2,0.4,0.8,1.2,0.2,1.3,MIA,ok,1630585.0,Marcus Garrett
@@ -1294,7 +1294,7 @@ Ethan Thompson,2021.0,94.0,Shooting Guard,1630679.0,2025-26,0.0,32.0,20.4,7.0,2.
 Romeo Weems,2021.0,95.0,Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Oscar da Silva,2021.0,96.0,Power Forward,1629735.0,2022-23,1.0,1.0,3.0,2.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,2.0,ATL,recovered:last_unique_wide_era,1629735.0,Chris Silva
 Javonte Smart,2021.0,97.0,Point Guard/Shooting Guard,1630606.0,2021-22,-2.5,17.0,11.8,3.0,1.4,0.9,0.4,0.2,0.317,0.296,0.833,1.1,3.5,0.5,1.6,0.3,0.4,0.3,1.1,0.6,0.7,MIA,ok,1630606.0,Javonte Smart
-DJ Carton,2021.0,98.0,Point Guard,1630618.0,2023-24,-7.8,4.0,8.9,2.8,1.0,0.8,0.3,0.0,0.375,0.25,0.8,0.8,2.0,0.3,1.0,1.0,1.3,0.5,0.5,0.3,0.8,TOR,recovered:last_unique,1630618.0,D.J. Carton
+DJ Carton,2021.0,98.0,Point Guard,1630618.0,2024-25,3.0,4.0,8.3,0.8,1.0,0.8,0.5,0.0,0.143,0.0,1.0,0.3,1.8,0.0,0.8,0.3,0.3,0.0,1.0,1.0,0.3,TOR,recovered:last_unique,1630618.0,D.J. Carton
 Denzel Mahoney,2021.0,99.0,Shooting Guard/Small Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Amar Sylla,2021.0,100.0,Power Forward,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Jabari Smith,2022.0,1.0,Power Forward,1631095.0,2024-25,4.4,57.0,30.1,12.2,7.0,1.1,0.4,0.7,0.438,0.354,0.825,4.4,9.9,1.7,4.9,1.8,2.2,1.8,5.2,1.1,2.2,HOU,ok,1631095.0,Jabari Smith Jr.
@@ -1367,7 +1367,7 @@ Johnny Juzang,2022.0,67.0,Shooting Guard/Small Forward,1630548.0,2025-26,-0.2,21
 Moussa Diabate,2022.0,68.0,Power Forward/Center,1631217.0,2025-26,4.7,73.0,26.0,7.9,8.7,1.9,0.8,1.0,0.631,0.5,0.659,3.1,5.0,0.0,0.0,1.6,2.4,3.7,5.0,1.0,2.4,CHA,ok,1631217.0,Moussa Diabaté
 Kenneth Lofton,2022.0,69.0,Power Forward,1631254.0,2023-24,-0.5,21.0,9.4,4.6,1.8,1.6,0.3,0.2,0.462,0.292,0.654,1.7,3.7,0.3,1.1,0.8,1.2,0.6,1.2,0.7,1.1,UTA,ok,1631254.0,Kenneth Lofton Jr.
 Hugo Besson,2022.0,70.0,Point Guard/Shooting Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
-Trevion Williams,2022.0,71.0,Power Forward/Center,1631351.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last_fuzzy,,
+Trevion Williams,2022.0,71.0,Power Forward/Center,1631351.0,2025-26,-17.9,7.0,32.0,10.4,5.4,2.6,1.6,0.1,0.333,0.283,1.0,3.6,10.7,2.1,7.6,1.1,1.1,1.6,3.9,1.4,3.7,MEM,recovered:last_fuzzy,1631351.0,Lucas Williamson
 Khalifa Diop,2022.0,72.0,Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Matteo Spagnolo,2022.0,73.0,Point Guard,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Karlo Matkovic,2022.0,74.0,Power Forward/Center,1631255.0,2025-26,-1.5,62.0,14.7,5.7,3.7,0.8,0.4,0.9,0.604,0.422,0.732,2.3,3.8,0.6,1.5,0.5,0.7,1.2,2.5,0.5,1.7,NOP,ok,1631255.0,Karlo Matković
@@ -1393,7 +1393,7 @@ Luke Travers,2022.0,93.0,Shooting Guard/Small Forward,1631247.0,2024-25,-0.1,12.
 Jermaine Samuels,2022.0,94.0,Small Forward,1631257.0,2023-24,-0.9,14.0,4.3,1.4,0.9,0.2,0.1,0.1,0.643,0.0,1.0,0.6,1.0,0.0,0.1,0.1,0.1,0.2,0.7,0.0,0.4,HOU,ok,1631257.0,Jermaine Samuels Jr.
 Tyrese Martin,2022.0,95.0,Shooting Guard/Small Forward,1631213.0,2022-23,0.1,16.0,4.1,1.3,0.8,0.1,0.1,0.0,0.391,0.143,1.0,0.6,1.4,0.1,0.4,0.1,0.1,0.3,0.4,0.1,0.1,ATL,ok,1631213.0,Tyrese Martin
 Collin Gillespie,2022.0,96.0,Point Guard,1631221.0,2025-26,2.5,80.0,28.5,12.7,4.1,4.6,1.2,0.2,0.418,0.401,0.874,4.4,10.5,2.9,7.2,1.0,1.1,1.1,3.0,1.6,1.6,PHX,ok,1631221.0,Collin Gillespie
-JeeNathan Williams,2022.0,97.0,Shooting Guard/Small Forward,1631351.0,,,,,,,,,,,,,,,,,,,,,,,,recovered_no_data:last_fuzzy,,
+JeeNathan Williams,2022.0,97.0,Shooting Guard/Small Forward,1631351.0,2025-26,-17.9,7.0,32.0,10.4,5.4,2.6,1.6,0.1,0.333,0.283,1.0,3.6,10.7,2.1,7.6,1.1,1.1,1.6,3.9,1.4,3.7,MEM,recovered:last_fuzzy,1631351.0,Lucas Williamson
 Buddy Boeheim,2022.0,98.0,Shooting Guard,1631205.0,2023-24,2.1,10.0,8.4,3.4,1.0,0.3,0.0,0.1,0.31,0.32,0.8,0.9,2.9,0.8,2.5,0.8,1.0,0.3,0.7,0.0,0.5,DET,ok,1631205.0,Buddy Boeheim
 Kai Sotto,2022.0,99.0,Center,,,,,,,,,,,,,,,,,,,,,,,,,not_found_in_api,,
 Victor Wembanyama,2023.0,1.0,Center,1641705.0,2025-26,10.7,64.0,29.2,25.0,11.5,3.1,1.0,3.1,0.512,0.349,0.827,8.6,16.9,1.9,5.5,5.8,7.0,2.0,9.5,2.4,2.4,SAS,ok,1641705.0,Victor Wembanyama
