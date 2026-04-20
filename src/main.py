@@ -48,8 +48,12 @@ def main() -> None:
     print(f"[config] output: {cfg['output']['dir']}")
 
     if model_type == "regression":
-        # TODO: from src.training.run_regression import run; run(cfg, device)
-        raise NotImplementedError("regression pipeline not yet implemented")
+        import src.models.regression_model as rm
+        rm.TARGET_MODE  = cfg["model"]["regression"].get("target_mode", "survived_3yrs")
+        rm.USE_DRAFT_PICK = cfg["model"]["regression"].get("use_draft_pick", False)
+        df = rm.load_data()
+        results, y_test = rm.train_and_evaluate(df)
+        rm.plot_results(results, y_test)
     elif model_type == "text":
         # TODO: from src.training.run_text import run; run(cfg, device)
         raise NotImplementedError("text pipeline not yet implemented")

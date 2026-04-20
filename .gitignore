@@ -38,6 +38,13 @@ venv/
 ENV/
 env/
 
+# MLflow
+mlruns/
+mlflow.db
+
+# Training outputs
+outputs/
+
 # IDE and System files
 .vscode/
 .idea/

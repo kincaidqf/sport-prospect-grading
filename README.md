@@ -65,4 +65,53 @@ Entry point that loads YAML config, resolves compute device, and dispatches to t
 
 ## Setup
 
-Install uv
+### Prerequisites
+
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (package manager)
+- Docker + Docker Compose (optional, for containerized runs)
+
+### Local (recommended)
+
+```bash
+# 1. Clone the repo
+git clone <repo-url>
+cd sport-prospect-grading
+
+# 2. Install dependencies
+uv sync
+
+# 3. Copy and configure environment variables
+cp .env.example .env
+# Edit .env to set WANDB_API_KEY if using W&B online mode
+
+# 4. Run the regression model
+uv run python src/models/regression_model.py
+
+# 5. (Optional) Launch the MLflow UI to inspect runs
+uv run mlflow ui
+```
+
+### Docker (CPU)
+
+```bash
+make build
+make train
+```
+
+### Docker (GPU / RTX 5090)
+
+```bash
+make build-gpu
+make train-gpu
+```
+
+### Jupyter Notebook
+
+```bash
+# Local
+uv run jupyter notebook notebooks/
+
+# Docker
+make notebook
+```
