@@ -73,11 +73,11 @@ def parse_players_list(path: Path) -> list[dict]:
 
 def draft_year_to_seasons(draft_year: int) -> list[str]:
     """
-    Return the 3 NBA season IDs for the first 3 seasons after a draft year.
-    e.g. draft_year=2009 → ["2009-10", "2010-11", "2011-12"]
+    Return the 5 NBA season IDs for the first 5 seasons after a draft year.
+    e.g. draft_year=2009 → ["2009-10", "2010-11", "2011-12", "2012-13", "2013-14"]
     """
     seasons = []
-    for offset in range(3):
+    for offset in range(5):
         start = draft_year + offset
         seasons.append(f"{start}-{str(start + 1)[-2:]}")
     return seasons
