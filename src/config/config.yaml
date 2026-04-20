@@ -2,8 +2,10 @@ defaults:
   - _self_
 
 model:
-  type: multimodal          # regression | text | multimodal
+  type: regression          # regression | text | multimodal
   regression:
+    target_mode: survived_3yrs  # plus_minus | became_starter | survived_3yrs
+    use_draft_pick: false        # include draft pick as a feature (leaks scout judgment)
     alpha_min: 1e-4         # lasso alpha search range
     alpha_max: 1e2
     alpha_steps: 100
