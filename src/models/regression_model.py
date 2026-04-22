@@ -65,8 +65,21 @@ USE_DRAFT_PICK = False
 TEST_SIZE    = 0.2
 RANDOM_STATE = 42
 
-# 3FG% dropped (90% null) — replaced with shoots_3s binary flag
-NUMERIC_FEATURES = ["PPG", "RPG", "FG%", "FT%", "APG", "BKPG", "STPG", "G", "shoots_3s"]
+# Per-game stats computed from raw totals for better coverage, plus derived
+# efficiency metrics.  Original leaderboard per-game columns (PPG, RPG, …)
+# are only present when a player appeared on that stat's NCAA leaderboard,
+# so we recompute them from the season totals (PTS/G, REB/G, …).
+NUMERIC_FEATURES = [
+    # core per-game (computed from totals)
+    "pts_pg", "reb_pg", "ast_pg", "blk_pg", "stl_pg",
+    "fgm_pg", "fga_pg", "ft_pg", "fta_pg", "fg3_pg",
+    # percentages (computed from totals)
+    "fg_pct", "ft_pct",
+    # derived efficiency
+    "pts_per_fga", "ft_rate", "fg3_share",
+    # other
+    "G", "shoots_3s",
+]
 DRAFT_PICK_FEATURE = "draft_pick"
 HEIGHT_FEATURE     = "Ht"
 CLASS_FEATURE      = "Cl"
@@ -160,12 +173,61 @@ def load_data():
     seasons = _seasons_played(nba)
     df["survived_3yrs"] = df["player_id"].map(seasons).fillna(0).ge(3).astype(int)
 
-    # Feature engineering
+    # ── Feature engineering ───────────────────────────────────────────────
     df["height_in"] = df[HEIGHT_FEATURE].apply(parse_height)
     df[CLASS_FEATURE]    = df[CLASS_FEATURE].str.strip().replace({"Fr": "Fr.", "So": "So.", "Jr": "Jr.", "Sr": "Sr."})
     df[POSITION_FEATURE] = df[POSITION_FEATURE].str.strip()
-    df["shoots_3s"]      = (df["3FG"].fillna(0) > 0).astype(float)
     df[CONF_FEATURE]     = df["Team"].apply(assign_conf_tier)
+
+    # Compute per-game stats from raw totals — these have better coverage
+    # than the pre-computed leaderboard columns (PPG, RPG, etc.).
+    g = df["G"].replace(0, np.nan)  # guard against division by zero
+    df["pts_pg"] = df["PTS"] / g
+    df["reb_pg"] = df["REB"] / g
+    df["ast_pg"] = df["AST"] / g
+    df["blk_pg"] = df["BLKS"] / g
+    df["stl_pg"] = df["ST"]  / g
+    df["fgm_pg"] = df["FGM"] / g
+    df["fga_pg"] = df["FGA"] / g
+    df["ft_pg"]  = df["FT"]  / g
+    df["fta_pg"] = df["FTA"] / g
+    df["fg3_pg"] = df["3FG"] / g
+
+    # Fill computed per-game with original leaderboard values where totals
+    # were missing but the per-game column existed.
+    _backfill = [
+        ("pts_pg", "PPG"), ("reb_pg", "RPG"), ("ast_pg", "APG"),
+        ("blk_pg", "BKPG"), ("stl_pg", "STPG"),
+    ]
+    for computed, original in _backfill:
+        df[computed] = df[computed].fillna(df[original])
+
+    # Percentages — compute from totals, fall back to leaderboard columns
+    df["fg_pct"] = (df["FGM"] / df["FGA"].replace(0, np.nan)) * 100
+    df["fg_pct"] = df["fg_pct"].fillna(df["FG%"])
+
+    df["ft_pct"] = (df["FT"] / df["FTA"].replace(0, np.nan)) * 100
+    df["ft_pct"] = df["ft_pct"].fillna(df["FT%"])
+
+    # Derived efficiency features
+    df["pts_per_fga"] = df["PTS"] / df["FGA"].replace(0, np.nan)
+    df["ft_rate"]     = df["FTA"] / df["FGA"].replace(0, np.nan)
+    df["fg3_share"]   = df["3FG"].fillna(0) / df["FGM"].replace(0, np.nan)
+
+    # Binary flag
+    df["shoots_3s"] = (df["3FG"].fillna(0) > 0).astype(float)
+
+    # ── Data quality report ───────────────────────────────────────────────
+    print(f"\n{'='*50}")
+    print(f"  Data Quality Report  ({len(df)} players)")
+    print(f"{'='*50}")
+    for col in NUMERIC_FEATURES:
+        n_null = df[col].isna().sum()
+        print(f"  {col:<14}: {n_null:4d} null ({100*n_null/len(df):5.1f}%)")
+    total_null = df[NUMERIC_FEATURES].isna().sum(axis=1)
+    print(f"\n  Players with 0 missing features: {(total_null == 0).sum()}")
+    print(f"  Players with >50% missing:       {(total_null > len(NUMERIC_FEATURES)//2).sum()}")
+    print(f"{'='*50}\n")
 
     return df
 
