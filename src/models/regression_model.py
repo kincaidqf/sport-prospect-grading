@@ -287,6 +287,13 @@ def train_and_evaluate(df, use_draft_pick=USE_DRAFT_PICK):
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
     results = {}
 
+    # Store column info for plotting
+    col_info = {
+        "numeric_cols": numeric_cols,
+        "categorical_cols": categorical_cols,
+        "ordinal_cols": ordinal_cols,
+    }
+
     if _is_classification():
         _run_classification(
             preprocessor, feature_cols, numeric_cols, categorical_cols, ordinal_cols,
@@ -298,7 +305,7 @@ def train_and_evaluate(df, use_draft_pick=USE_DRAFT_PICK):
             X_train, y_train, X_test, y_test, train, test, use_draft_pick, results,
         )
 
-    return results, y_test
+    return results, y_test, col_info
 
 
 def _run_regression(
@@ -512,19 +519,44 @@ def _print_xgb_importances(pipe, numeric_cols, categorical_cols, ordinal_cols, t
 
 # ── Plots ──────────────────────────────────────────────────────────────────────
 
-def plot_results(results, y_test):
+def _get_all_feature_names(pipe, numeric_cols, categorical_cols, ordinal_cols):
+    """Resolve expanded feature names (after one-hot encoding)."""
+    preprocessor = pipe.named_steps["preprocessor"]
+    cat_names = list(preprocessor.named_transformers_["cat"]
+                     .named_steps["onehot"].get_feature_names_out(categorical_cols))
+    return list(numeric_cols) + cat_names + list(ordinal_cols)
+
+
+def _get_coef_df(pipe, numeric_cols, categorical_cols, ordinal_cols, step_name):
+    """Get coefficient DataFrame from a linear model pipeline step."""
+    model = pipe.named_steps[step_name]
+    all_names = _get_all_feature_names(pipe, numeric_cols, categorical_cols, ordinal_cols)
+    coefs = model.coef_.ravel()
+    df = pd.DataFrame({"feature": all_names, "coefficient": coefs})
+    df["abs_coef"] = df["coefficient"].abs()
+    return df.sort_values("abs_coef", ascending=False)
+
+
+def plot_results(results, y_test, col_info):
     if _is_classification():
         _plot_classification(results, y_test)
     else:
         _plot_regression(results, y_test)
 
+    _plot_feature_importance(results, col_info)
+    _plot_model_summary(results, y_test)
+
 
 def _plot_regression(results, y_test):
-    fig, axes = plt.subplots(1, len(results), figsize=(6 * len(results), 5))
+    n = len(results)
+    fig, axes = plt.subplots(2, n, figsize=(6 * n, 10))
     fig.suptitle(f"NBA {TARGET_MODE} Prediction from College Stats", fontsize=14, fontweight="bold")
 
-    for ax, (name, res) in zip(axes, results.items()):
+    for col_idx, (name, res) in enumerate(results.items()):
         y_pred = res["y_pred"]
+
+        # Row 1: actual vs predicted scatter
+        ax = axes[0][col_idx]
         ax.scatter(y_test, y_pred, alpha=0.5, s=30, edgecolors="none")
         lim = max(abs(y_test.min()), abs(y_test.max()), abs(np.min(y_pred)), abs(np.max(y_pred))) + 1
         ax.plot([-lim, lim], [-lim, lim], "r--", linewidth=1, label="Perfect")
@@ -534,6 +566,15 @@ def _plot_regression(results, y_test):
         ax.legend(fontsize=8)
         ax.set_xlim(-lim, lim)
         ax.set_ylim(-lim, lim)
+
+        # Row 2: residual plot
+        ax2 = axes[1][col_idx]
+        residuals = y_test - y_pred
+        ax2.scatter(y_pred, residuals, alpha=0.5, s=30, edgecolors="none")
+        ax2.axhline(0, color="r", linestyle="--", linewidth=1)
+        ax2.set_xlabel("Predicted")
+        ax2.set_ylabel("Residual (Actual - Predicted)")
+        ax2.set_title(f"{name} Residuals")
 
     plt.tight_layout()
     _save_and_log(fig, "regression_results.png", results,
@@ -561,6 +602,188 @@ def _plot_classification(results, y_test):
                   {n: {"accuracy": r["accuracy"], "roc_auc": r["auc"]} for n, r in results.items()})
 
 
+def _plot_feature_importance(results, col_info):
+    """Plot feature importance / coefficients for all models side by side."""
+    numeric_cols = col_info["numeric_cols"]
+    categorical_cols = col_info["categorical_cols"]
+    ordinal_cols = col_info["ordinal_cols"]
+
+    # Collect importance data per model
+    importance_data = {}
+
+    for name, res in results.items():
+        pipe = res["pipe"]
+        if name in ("Lasso", "Ridge"):
+            coef_df = _get_coef_df(pipe, numeric_cols, categorical_cols, ordinal_cols, name.lower())
+            importance_data[name] = coef_df.rename(columns={"coefficient": "importance"})
+        elif name in ("LogisticL1", "LogisticL2"):
+            coef_df = _get_coef_df(pipe, numeric_cols, categorical_cols, ordinal_cols, "clf")
+            importance_data[name] = coef_df.rename(columns={"coefficient": "importance"})
+        elif name == "XGBoost":
+            imp_df = _get_xgb_importance_df(pipe, numeric_cols, categorical_cols, ordinal_cols)
+            importance_data[name] = imp_df.rename(columns={"importance": "importance"})
+
+    n_models = len(importance_data)
+    fig, axes = plt.subplots(1, n_models, figsize=(7 * n_models, 8))
+    if n_models == 1:
+        axes = [axes]
+    fig.suptitle(f"Feature Importance — {TARGET_MODE}", fontsize=14, fontweight="bold")
+
+    for ax, (name, imp_df) in zip(axes, importance_data.items()):
+        top = imp_df.head(15).copy()
+        is_coef = name in ("Lasso", "Ridge", "LogisticL1", "LogisticL2")
+
+        if is_coef:
+            # Show signed coefficients — sort by absolute value
+            top = top.sort_values("abs_coef", ascending=True)
+            colors = ["#2ecc71" if v > 0 else "#e74c3c" for v in top["importance"]]
+            ax.barh(top["feature"], top["importance"], color=colors)
+            ax.set_xlabel("Coefficient (standardized)")
+            ax.axvline(0, color="black", linewidth=0.5)
+        else:
+            # XGBoost importance — always positive
+            top = top.sort_values("importance", ascending=True)
+            ax.barh(top["feature"], top["importance"], color="#3498db")
+            ax.set_xlabel("Feature Importance (gain)")
+
+        ax.set_title(name)
+        ax.tick_params(axis="y", labelsize=9)
+
+    plt.tight_layout()
+    out_path = os.path.join(PROJECT_ROOT, "src", "models", "feature_importance.png")
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    print(f"\nPlot saved to {out_path}")
+    plt.show()
+
+    # ── Coefficient / importance table (all models combined) ──────────────
+    _plot_importance_heatmap(importance_data)
+
+
+def _plot_importance_heatmap(importance_data):
+    """Heatmap comparing feature importance across all models."""
+    # Build a unified dataframe
+    all_features = set()
+    for imp_df in importance_data.values():
+        all_features.update(imp_df["feature"].tolist())
+    all_features = sorted(all_features)
+
+    matrix = pd.DataFrame(index=all_features)
+    for name, imp_df in importance_data.items():
+        col_name = name
+        vals = imp_df.set_index("feature")
+        if "abs_coef" in vals.columns:
+            matrix[col_name] = vals["abs_coef"]
+        else:
+            matrix[col_name] = vals["importance"]
+    matrix = matrix.fillna(0)
+
+    # Normalize each column to 0-1 for comparison
+    matrix_norm = matrix.copy()
+    for c in matrix_norm.columns:
+        mx = matrix_norm[c].max()
+        if mx > 0:
+            matrix_norm[c] = matrix_norm[c] / mx
+
+    # Sort by mean importance across models
+    matrix_norm["_mean"] = matrix_norm.mean(axis=1)
+    matrix_norm = matrix_norm.sort_values("_mean", ascending=True)
+    matrix_norm = matrix_norm.drop(columns=["_mean"])
+
+    # Take top 20
+    matrix_norm = matrix_norm.tail(20)
+
+    fig, ax = plt.subplots(figsize=(8, max(6, len(matrix_norm) * 0.4)))
+    im = ax.imshow(matrix_norm.values, aspect="auto", cmap="YlOrRd", vmin=0, vmax=1)
+
+    ax.set_xticks(range(len(matrix_norm.columns)))
+    ax.set_xticklabels(matrix_norm.columns, fontsize=10)
+    ax.set_yticks(range(len(matrix_norm.index)))
+    ax.set_yticklabels(matrix_norm.index, fontsize=9)
+
+    # Annotate cells
+    for i in range(len(matrix_norm.index)):
+        for j in range(len(matrix_norm.columns)):
+            val = matrix_norm.values[i, j]
+            color = "white" if val > 0.6 else "black"
+            ax.text(j, i, f"{val:.2f}", ha="center", va="center", fontsize=8, color=color)
+
+    ax.set_title(f"Normalized Feature Importance Comparison — {TARGET_MODE}",
+                 fontsize=12, fontweight="bold")
+    fig.colorbar(im, ax=ax, label="Relative importance (0–1)", shrink=0.8)
+    plt.tight_layout()
+
+    out_path = os.path.join(PROJECT_ROOT, "src", "models", "importance_heatmap.png")
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    print(f"Plot saved to {out_path}")
+    plt.show()
+
+
+def _plot_model_summary(results, y_test):
+    """Summary table showing all model metrics side by side."""
+    is_clf = _is_classification()
+
+    rows = []
+    for name, res in results.items():
+        row = {"Model": name}
+        if is_clf:
+            row["Accuracy"] = res["accuracy"]
+            row["ROC-AUC"] = res["auc"]
+            row["C / alpha"] = f"{res.get('C', res.get('alpha', ''))}"
+        else:
+            row["R²"] = res["r2"]
+            row["RMSE"] = res["rmse"]
+            row["MAE"] = res["mae"]
+            row["alpha"] = res.get("alpha", "")
+        rows.append(row)
+
+    summary_df = pd.DataFrame(rows)
+
+    fig, ax = plt.subplots(figsize=(max(8, 2.5 * len(summary_df.columns)), 1.2 + 0.5 * len(rows)))
+    ax.axis("off")
+
+    # Format numeric values
+    cell_text = []
+    for _, row in summary_df.iterrows():
+        formatted = []
+        for v in row:
+            if isinstance(v, float):
+                formatted.append(f"{v:.4f}")
+            else:
+                formatted.append(str(v))
+        cell_text.append(formatted)
+
+    table = ax.table(
+        cellText=cell_text,
+        colLabels=summary_df.columns,
+        loc="center",
+        cellLoc="center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+    table.scale(1.0, 1.8)
+
+    # Style header
+    for j in range(len(summary_df.columns)):
+        table[0, j].set_facecolor("#2c3e50")
+        table[0, j].set_text_props(color="white", fontweight="bold")
+
+    # Alternate row colors
+    for i in range(len(rows)):
+        color = "#ecf0f1" if i % 2 == 0 else "white"
+        for j in range(len(summary_df.columns)):
+            table[i + 1, j].set_facecolor(color)
+
+    title = "Classification" if is_clf else "Regression"
+    ax.set_title(f"Model Comparison — {title} ({TARGET_MODE})",
+                 fontsize=13, fontweight="bold", pad=20)
+
+    plt.tight_layout()
+    out_path = os.path.join(PROJECT_ROOT, "src", "models", "model_summary.png")
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    print(f"Plot saved to {out_path}")
+    plt.show()
+
+
 def _save_and_log(fig, filename, results, summary_metrics):
     out_path = os.path.join(PROJECT_ROOT, "src", "models", filename)
     fig.savefig(out_path, dpi=150)
@@ -579,5 +802,5 @@ def _save_and_log(fig, filename, results, summary_metrics):
 
 if __name__ == "__main__":
     df = load_data()
-    results, y_test = train_and_evaluate(df)
-    plot_results(results, y_test)
+    results, y_test, col_info = train_and_evaluate(df)
+    plot_results(results, y_test, col_info)
