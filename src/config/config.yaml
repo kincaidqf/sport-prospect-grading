@@ -57,3 +57,4 @@ logging:
 output:
   dir: outputs/
   checkpoint_dir: outputs/checkpoints/
+  plots_dir: outputs/plots/

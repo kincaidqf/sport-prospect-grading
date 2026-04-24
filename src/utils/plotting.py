@@ -10,7 +10,7 @@ from src.utils.features import get_coef_df, get_xgb_importance_df
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DEFAULT_ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "src", "models")
+DEFAULT_ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
 
 
 def _artifact_path(filename, artifact_dir=DEFAULT_ARTIFACT_DIR):

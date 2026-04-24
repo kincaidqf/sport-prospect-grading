@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LOCAL_TRACKING_DIR = PROJECT_ROOT / "mlruns"
 DEFAULT_LOCAL_ARTIFACT_DIR = PROJECT_ROOT / "mlartifacts"
+DEFAULT_LOCAL_PLOTS_DIR = PROJECT_ROOT / "outputs" / "plots"
 
 
 @dataclass
@@ -27,6 +28,7 @@ class MLflowContext:
     experiment_name: str
     parent_run_name: str
     artifact_location: str | None
+    plot_dir: str
     tags: dict[str, str]
 
 
@@ -57,6 +59,14 @@ def _resolve_artifact_location(cfg: dict[str, Any] | None = None, artifact_locat
             return raw
         return _to_file_uri(raw)
     return None
+
+
+def _resolve_plots_base_dir(cfg: dict[str, Any] | None = None) -> Path:
+    output_cfg = (cfg or {}).get("output") or {}
+    raw = os.getenv("MODEL_PLOTS_DIR") or output_cfg.get("plots_dir")
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return DEFAULT_LOCAL_PLOTS_DIR
 
 
 def _get_git_value(args: list[str]) -> str | None:
@@ -109,6 +119,8 @@ def build_mlflow_context(
     resolved_artifact_location = _resolve_artifact_location(cfg=cfg, artifact_location=artifact_location)
     experiment_name = _default_experiment_name(cfg, model_type, fallback_experiment_name)
     parent_run_name = run_name or os.getenv("MLFLOW_RUN_NAME") or _default_run_name(model_type, target_name)
+    plot_dir = _resolve_plots_base_dir(cfg) / parent_run_name
+    plot_dir.mkdir(parents=True, exist_ok=True)
 
     mlflow.set_tracking_uri(resolved_tracking_uri)
 
@@ -139,12 +151,14 @@ def build_mlflow_context(
     print(f"[mlflow] tracking_uri: {resolved_tracking_uri}")
     print(f"[mlflow] experiment: {experiment_name}")
     print(f"[mlflow] run_name: {parent_run_name}")
+    print(f"[mlflow] plot_dir: {plot_dir}")
 
     return MLflowContext(
         tracking_uri=resolved_tracking_uri,
         experiment_name=experiment_name,
         parent_run_name=parent_run_name,
         artifact_location=resolved_artifact_location,
+        plot_dir=str(plot_dir),
         tags=tags,
     )
 

@@ -32,7 +32,7 @@ MLFLOW_EXPERIMENT = "nba-draft-prospect-classification"
 CLASSIFICATION_TARGETS = {"became_starter", "survived_3yrs"}
 TARGET_MODE = "survived_3yrs"
 USE_DRAFT_PICK = False
-ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "src", "models")
+ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
 
 
 def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, mlflow_ctx=None):
@@ -237,13 +237,13 @@ def _run_classification(
     print_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
 
 
-def plot_results(results, y_test, col_info, target_mode=TARGET_MODE):
-    _plot_classification(results, y_test, target_mode)
-    plot_feature_importance(results, col_info, target_mode, artifact_dir=ARTIFACT_DIR)
-    plot_model_summary(results, target_mode, "classification", artifact_dir=ARTIFACT_DIR)
+def plot_results(results, y_test, col_info, target_mode=TARGET_MODE, plot_dir=ARTIFACT_DIR):
+    _plot_classification(results, y_test, target_mode, plot_dir=plot_dir)
+    plot_feature_importance(results, col_info, target_mode, artifact_dir=plot_dir)
+    plot_model_summary(results, target_mode, "classification", artifact_dir=plot_dir)
 
 
-def _plot_classification(results, y_test, target_mode):
+def _plot_classification(results, y_test, target_mode, plot_dir):
     n = len(results)
     fig, axes = plt.subplots(2, n, figsize=(5 * n, 9))
     fig.suptitle(f"NBA {target_mode} Classification from College Stats", fontsize=13, fontweight="bold")
@@ -265,7 +265,7 @@ def _plot_classification(results, y_test, target_mode):
         fig,
         "classification_results.png",
         {name: {"accuracy": res["accuracy"], "roc_auc": res["auc"]} for name, res in results.items()},
-        artifact_dir=ARTIFACT_DIR,
+        artifact_dir=plot_dir,
     )
 
 
@@ -296,7 +296,7 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
             use_draft_pick=use_draft_pick,
             mlflow_ctx=mlflow_ctx,
         )
-        plot_results(results, y_test, col_info, target_mode=target_mode)
+        plot_results(results, y_test, col_info, target_mode=target_mode, plot_dir=mlflow_ctx.plot_dir)
     return results, y_test, col_info
 
 

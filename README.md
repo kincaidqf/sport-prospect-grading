@@ -101,6 +101,12 @@ All supported training entrypoints now configure MLflow automatically and log:
 - Fitted sklearn or PyTorch models
 - Run metadata tags including git branch, commit, hostname, and user
 
+Local PNGs are also written per run under:
+
+```text
+outputs/plots/{mlflow_parent_run_name}/
+```
+
 ### Default behavior
 
 If you do nothing, runs are written to a local repo-relative MLflow store under `./mlruns`.
@@ -123,6 +129,8 @@ Parent runs use this pattern by default:
 ```
 
 Tabular models create nested child runs per estimator like `__lasso`, `__ridge`, `__logisticl1`, and `__xgboost`, which makes model comparisons easy inside one training session.
+
+Generated PNGs are stored in the parent run's local plot directory, so each run's visuals stay separate and do not overwrite each other.
 
 ### Helper scripts
 

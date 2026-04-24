@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 from typing import Sequence
 
 import matplotlib.pyplot as plt
@@ -419,11 +420,19 @@ def train_and_evaluate_text_model(
         print(f"RMSE = {metrics['rmse']:.4f}")
         print(f"MAE  = {metrics['mae']:.4f}")
 
-        _plot_text_results(y_test, y_pred, history)
+        _plot_text_results(y_test, y_pred, history, plot_dir=mlflow_ctx.plot_dir)
     return model, metrics
 
 
-def _plot_text_results(y_true: np.ndarray, y_pred: np.ndarray, history: dict[str, list[float]]) -> None:
+def _plot_text_results(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    history: dict[str, list[float]],
+    plot_dir: str,
+) -> None:
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
+
     plt.figure(figsize=(6, 5))
     plt.scatter(y_true, y_pred, alpha=0.6, s=30, edgecolors="none")
     lim = max(abs(float(np.min(y_true))), abs(float(np.max(y_true))), abs(float(np.min(y_pred))), abs(float(np.max(y_pred)))) + 1
@@ -435,11 +444,11 @@ def _plot_text_results(y_true: np.ndarray, y_pred: np.ndarray, history: dict[str
     plt.xlim(-lim, lim)
     plt.ylim(-lim, lim)
     plt.tight_layout()
-    out_path = os.path.join(PROJECT_ROOT, "src", "models", "text_model_results.png")
+    out_path = plot_path / "text_model_results.png"
     plt.savefig(out_path, dpi=150)
     print(f"\nPlot saved to {out_path}")
     if mlflow.active_run() is not None:
-        mlflow.log_artifact(out_path, artifact_path="plots")
+        mlflow.log_artifact(str(out_path), artifact_path="plots")
 
     plt.figure(figsize=(7, 4))
     epochs = range(1, len(history["train_loss"]) + 1)
@@ -450,11 +459,11 @@ def _plot_text_results(y_true: np.ndarray, y_pred: np.ndarray, history: dict[str
     plt.title("Text Model Loss Curves")
     plt.legend()
     plt.tight_layout()
-    loss_out_path = os.path.join(PROJECT_ROOT, "src", "models", "text_model_loss_curves.png")
+    loss_out_path = plot_path / "text_model_loss_curves.png"
     plt.savefig(loss_out_path, dpi=150)
     print(f"Plot saved to {loss_out_path}")
     if mlflow.active_run() is not None:
-        mlflow.log_artifact(loss_out_path, artifact_path="plots")
+        mlflow.log_artifact(str(loss_out_path), artifact_path="plots")
 
 
 if __name__ == "__main__":
