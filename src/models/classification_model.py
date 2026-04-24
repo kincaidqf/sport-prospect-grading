@@ -24,6 +24,7 @@ from src.data.loader import (
 )
 from src.training.evaluate import classification_metrics
 from src.utils.features import log_xgb_importances, print_xgb_importances
+from src.utils.mlflow_utils import build_mlflow_context, log_common_params, log_config_dict, managed_run
 from src.utils.plotting import plot_feature_importance, plot_model_summary, save_and_log
 
 
@@ -34,7 +35,7 @@ USE_DRAFT_PICK = False
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "src", "models")
 
 
-def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK):
+def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, mlflow_ctx=None):
     if target_mode not in CLASSIFICATION_TARGETS:
         raise ValueError(
             f"classification_model only supports {sorted(CLASSIFICATION_TARGETS)}; got {target_mode!r}"
@@ -58,7 +59,6 @@ def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PIC
     print(f"Train:   {len(train)} | Test: {len(test)}")
     print(f"Features: {len(feature_cols)} raw columns → expanded after one-hot\n")
 
-    mlflow.set_experiment(MLFLOW_EXPERIMENT)
     results = {}
     col_info = {
         "numeric_cols": numeric_cols,
@@ -80,6 +80,7 @@ def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PIC
         target_mode,
         use_draft_pick,
         results,
+        mlflow_ctx,
     )
     return results, y_test, col_info
 
@@ -98,11 +99,18 @@ def _run_classification(
     target_mode,
     use_draft_pick,
     results,
+    mlflow_ctx,
 ):
     cs = np.logspace(-3, 2, 20)
 
     for name, penalty in [("LogisticL1", "l1"), ("LogisticL2", "l2")]:
-        with mlflow.start_run(run_name=f"{name}_{target_mode}"):
+        run_manager = managed_run(
+            mlflow_ctx,
+            run_name=f"{mlflow_ctx.parent_run_name}__{name.lower()}",
+            nested=True,
+            tags={"estimator": name.lower()},
+        ) if mlflow_ctx else mlflow.start_run(run_name=f"{name}_{target_mode}")
+        with run_manager:
             model = LogisticRegressionCV(
                 Cs=cs,
                 cv=5,
@@ -120,7 +128,7 @@ def _run_classification(
             metrics = classification_metrics(y_test, y_pred, y_prob)
             best_c = model.C_[0]
 
-            mlflow.log_params(
+            log_common_params(
                 {
                     "model": name,
                     "target": target_mode,
@@ -186,8 +194,14 @@ def _run_classification(
     y_prob_xgb = best.predict_proba(X_test)[:, 1]
     metrics_xgb = classification_metrics(y_test, y_pred_xgb, y_prob_xgb)
 
-    with mlflow.start_run(run_name=f"XGBoost_{target_mode}"):
-        mlflow.log_params(
+    run_manager = managed_run(
+        mlflow_ctx,
+        run_name=f"{mlflow_ctx.parent_run_name}__xgboost",
+        nested=True,
+        tags={"estimator": "xgboost"},
+    ) if mlflow_ctx else mlflow.start_run(run_name=f"XGBoost_{target_mode}")
+    with run_manager:
+        log_common_params(
             {
                 "model": "XGBoost",
                 "target": target_mode,
@@ -251,20 +265,38 @@ def _plot_classification(results, y_test, target_mode):
         fig,
         "classification_results.png",
         {name: {"accuracy": res["accuracy"], "roc_auc": res["auc"]} for name, res in results.items()},
-        MLFLOW_EXPERIMENT,
-        target_mode,
         artifact_dir=ARTIFACT_DIR,
     )
 
 
-def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None):
+def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=None, run_name=None, tracking_uri=None):
     df = load_data() if df is None else df
-    results, y_test, col_info = train_and_evaluate(
-        df,
-        target_mode=target_mode,
-        use_draft_pick=use_draft_pick,
+    mlflow_ctx = build_mlflow_context(
+        cfg=cfg,
+        model_type="classification",
+        target_name=target_mode,
+        fallback_experiment_name=MLFLOW_EXPERIMENT,
+        tracking_uri=tracking_uri,
+        run_name=run_name,
     )
-    plot_results(results, y_test, col_info, target_mode=target_mode)
+    with managed_run(mlflow_ctx):
+        if cfg is not None:
+            log_config_dict(cfg)
+        log_common_params(
+            {
+                "model_family": "classification",
+                "target": target_mode,
+                "use_draft_pick": use_draft_pick,
+                "n_rows": len(df),
+            }
+        )
+        results, y_test, col_info = train_and_evaluate(
+            df,
+            target_mode=target_mode,
+            use_draft_pick=use_draft_pick,
+            mlflow_ctx=mlflow_ctx,
+        )
+        plot_results(results, y_test, col_info, target_mode=target_mode)
     return results, y_test, col_info
 
 

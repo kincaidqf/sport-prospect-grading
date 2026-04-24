@@ -13,7 +13,7 @@ Predict NBA draft success using:
 ### Core Modules
 
 #### `src/main.py`
-Entry point that loads YAML config, resolves compute device, and dispatches to the selected model pipeline (regression, classification, text, or multimodal).
+Entry point that loads YAML config, resolves compute device, configures MLflow, and dispatches to the selected model pipeline (regression, classification, text, or multimodal).
 
 #### `src/models/`
 - **`regression_model.py`**: Lasso/Ridge regression model predicting NBA PLUS_MINUS (best season) from final-year NCAA college stats. Uses Lasso for feature selection due to high multicollinearity.
@@ -27,6 +27,7 @@ Entry point that loads YAML config, resolves compute device, and dispatches to t
 - **`src/data/loader.py`**: Shared tabular data loading, target derivation, feature engineering, and sklearn preprocessing for stats-based models.
 - **`src/utils/features.py`**: Shared feature-name expansion and feature-importance helpers.
 - **`src/utils/plotting.py`**: Shared model-summary and feature-importance plotting utilities.
+- **`src/utils/mlflow_utils.py`**: Shared MLflow tracking URI resolution, experiment setup, run naming, tags, and per-epoch logging helpers.
 
 #### `src/utils/`
 - **`device.py`**: Detects and logs compute device (CPU / MPS / CUDA).
@@ -80,14 +81,56 @@ uv sync
 cp .env.example .env
 # Edit .env to set WANDB_API_KEY if using W&B online mode
 
-# 4. Run the regression model
-uv run python src/models/regression_model.py
+# 4. Run any supported model through the main entrypoint
+uv run python src/main.py --model regression
+uv run python src/main.py --model classification
+uv run python src/main.py --model text
 
-# 5. Run the classification model
-uv run python src/models/classification_model.py
+# 5. (Optional) Launch the MLflow UI to inspect runs in the local default store
+uv run mlflow ui --backend-store-uri ./mlruns
+```
 
-# 6. (Optional) Launch the MLflow UI to inspect runs
-uv run mlflow ui
+## MLflow logging
+
+All supported training entrypoints now configure MLflow automatically and log:
+
+- Hyperparameters and dataset split info
+- Per-epoch loss curves for the text model
+- Final evaluation metrics
+- Prediction/summary plots
+- Fitted sklearn or PyTorch models
+- Run metadata tags including git branch, commit, hostname, and user
+
+### Default behavior
+
+If you do nothing, runs are written to a local repo-relative MLflow store under `./mlruns`.
+
+### Shared team tracking
+
+To make runs visible across group members, everyone must point to the same MLflow backend. The simplest options are:
+
+- A shared MLflow server, for example `MLFLOW_TRACKING_URI=http://host:5000`
+- A shared mounted folder, for example `MLFLOW_TRACKING_URI=/Volumes/SharedDrive/sport-prospect-grading/mlruns`
+
+Set the same `MLFLOW_TRACKING_URI` for every teammate, either in shell env or `.env`. If you create new experiments against a remote SQL backend, you can also set `MLFLOW_ARTIFACT_LOCATION` to a shared artifact directory.
+
+### Naming conventions
+
+Parent runs use this pattern by default:
+
+```text
+{model_type}-{target}-{timestamp}-{user}-{git_sha}
+```
+
+Tabular models create nested child runs per estimator like `__lasso`, `__ridge`, `__logisticl1`, and `__xgboost`, which makes model comparisons easy inside one training session.
+
+### Helper scripts
+
+You can use the included helpers so the team launches MLflow consistently:
+
+```bash
+bash scripts/start_mlflow_ui.sh
+bash scripts/start_mlflow_server.sh
 ```
 
 ### Jupyter

@@ -20,6 +20,8 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--output-dir", default=None)
+    p.add_argument("--run-name", default=None)
+    p.add_argument("--tracking-uri", default=None)
     return p.parse_args()
 
 
@@ -53,6 +55,9 @@ def main() -> None:
         rm.run(
             target_mode=regression_cfg.get("target_mode", "plus_minus"),
             use_draft_pick=regression_cfg.get("use_draft_pick", False),
+            cfg=cfg,
+            run_name=args.run_name,
+            tracking_uri=args.tracking_uri,
         )
     elif model_type == "classification":
         import src.models.classification_model as cm
@@ -60,10 +65,25 @@ def main() -> None:
         cm.run(
             target_mode=classification_cfg.get("target_mode", "survived_3yrs"),
             use_draft_pick=classification_cfg.get("use_draft_pick", False),
+            cfg=cfg,
+            run_name=args.run_name,
+            tracking_uri=args.tracking_uri,
         )
     elif model_type == "text":
-        # TODO: from src.training.run_text import run; run(cfg, device)
-        raise NotImplementedError("text pipeline not yet implemented")
+        import src.models.text_model as tm
+        text_cfg = cfg["model"].get("text", {})
+        tm.train_and_evaluate_text_model(
+            pretrained=text_cfg.get("pretrained", "distilbert-base-uncased"),
+            output_dim=text_cfg.get("output_dim", 128),
+            freeze_base=text_cfg.get("freeze_base", False),
+            max_length=text_cfg.get("max_length", 512),
+            batch_size=cfg["training"].get("batch_size", 16),
+            epochs=cfg["training"].get("epochs", 3),
+            lr=cfg["training"].get("lr", 2e-5),
+            cfg=cfg,
+            run_name=args.run_name,
+            tracking_uri=args.tracking_uri,
+        )
     elif model_type == "multimodal":
         # TODO: from src.training.run_multimodal import run; run(cfg, device)
         raise NotImplementedError("multimodal pipeline not yet implemented")

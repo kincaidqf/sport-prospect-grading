@@ -23,6 +23,7 @@ dependencies = [
     "matplotlib",
     "seaborn",
     "pyyaml",
+    "python-dotenv",
     "hydra-core",
     "tqdm",
     "wandb",
