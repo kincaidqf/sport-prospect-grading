@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import mlflow
 import mlflow.sklearn
 import numpy as np
+from sklearn.base import clone
 from sklearn.linear_model import LassoCV, RidgeCV
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.pipeline import Pipeline
@@ -38,7 +39,7 @@ USE_DRAFT_PICK = False
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
 
 
-def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, mlflow_ctx=None):
+def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, mlflow_ctx=None, xgb_cfg=None):
     if target_mode not in REGRESSION_TARGETS:
         raise ValueError(
             f"regression_model only supports {sorted(REGRESSION_TARGETS)}; got {target_mode!r}"
@@ -82,6 +83,7 @@ def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PIC
         use_draft_pick,
         results,
         mlflow_ctx,
+        xgb_cfg=xgb_cfg,
     )
     return results, y_test, col_info
 
@@ -101,6 +103,7 @@ def _run_regression(
     use_draft_pick,
     results,
     mlflow_ctx,
+    xgb_cfg=None,
 ):
     alphas = np.logspace(-3, 2, 100)
 
@@ -155,73 +158,75 @@ def _run_regression(
             print(f"  RMSE = {metrics['rmse']:.4f}")
             print(f"  MAE  = {metrics['mae']:.4f}")
 
-    xgb_preprocessor, _, _, _ = build_feature_matrix(X_train, use_draft_pick=use_draft_pick)
-    xgb_base = Pipeline(
-        [
-            ("preprocessor", xgb_preprocessor),
-            ("xgb", XGBRegressor(random_state=RANDOM_STATE, n_jobs=-1, verbosity=0, min_child_weight=5)),
-        ]
-    )
-    gs = GridSearchCV(
-        xgb_base,
-        {
-            "xgb__n_estimators": [100, 200],
-            "xgb__max_depth": [2, 3],
-            "xgb__learning_rate": [0.05, 0.1],
-            "xgb__subsample": [0.7, 0.9],
-        },
-        cv=5,
-        scoring="r2",
-        n_jobs=-1,
-    )
-    gs.fit(X_train, y_train)
-    best = gs.best_estimator_
-    y_pred_xgb = best.predict(X_test)
-    metrics_xgb = regression_metrics(y_test, y_pred_xgb)
-
-    run_manager = managed_run(
-        mlflow_ctx,
-        run_name=f"{mlflow_ctx.parent_run_name}__xgboost",
-        nested=True,
-        tags={"estimator": "xgboost"},
-    ) if mlflow_ctx else mlflow.start_run(run_name=f"XGBoost_{target_mode}")
-    with run_manager:
-        log_common_params(
-            {
-                "model": "XGBoost",
-                "target": target_mode,
-                **{key.replace("xgb__", ""): value for key, value in gs.best_params_.items()},
-                "n_train": len(X_train),
-                "n_test": len(X_test),
-                "use_draft_pick": use_draft_pick,
-            }
-        )
-        mlflow.log_metrics(metrics_xgb)
-        log_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
-        mlflow.sklearn.log_model(best, artifact_path="xgboost")
-
-    results["XGBoost"] = {
-        "pipe": best,
-        "model": best.named_steps["xgb"],
-        "y_pred": y_pred_xgb,
-        "r2": metrics_xgb["r2"],
-        "rmse": metrics_xgb["rmse"],
-        "mae": metrics_xgb["mae"],
-        "alpha": None,
-        "importance_kind": "xgb",
-        "estimator_step": "xgb",
+    cfg = xgb_cfg or {}
+    param_grid = {
+        "xgb__n_estimators": cfg.get("n_estimators", [100, 200]),
+        "xgb__max_depth": cfg.get("max_depth", [2, 3]),
+        "xgb__learning_rate": cfg.get("learning_rate", [0.05, 0.1]),
+        "xgb__subsample": cfg.get("subsample", [0.7, 0.9]),
     }
+    cv_folds = cfg.get("cv_folds", 5)
 
-    print(f"{'='*40}")
-    print(f"  XGBoost  (best: {gs.best_params_})")
-    print(f"  R²   = {metrics_xgb['r2']:.4f}")
-    print(f"  RMSE = {metrics_xgb['rmse']:.4f}")
-    print(f"  MAE  = {metrics_xgb['mae']:.4f}")
+    try:
+        xgb_base = Pipeline(
+            [
+                ("preprocessor", clone(preprocessor)),
+                ("xgb", XGBRegressor(random_state=RANDOM_STATE, n_jobs=-1, verbosity=0, min_child_weight=5)),
+            ]
+        )
+        gs = GridSearchCV(xgb_base, param_grid, cv=cv_folds, scoring="r2", n_jobs=-1)
+        gs.fit(X_train, y_train)
+        best = gs.best_estimator_
+        y_pred_xgb = best.predict(X_test)
+        metrics_xgb = regression_metrics(y_test, y_pred_xgb)
+
+        run_manager = managed_run(
+            mlflow_ctx,
+            run_name=f"{mlflow_ctx.parent_run_name}__xgboost",
+            nested=True,
+            tags={"estimator": "xgboost"},
+        ) if mlflow_ctx else mlflow.start_run(run_name=f"XGBoost_{target_mode}")
+        with run_manager:
+            log_common_params(
+                {
+                    "model": "XGBoost",
+                    "target": target_mode,
+                    **{key.replace("xgb__", ""): value for key, value in gs.best_params_.items()},
+                    "n_train": len(X_train),
+                    "n_test": len(X_test),
+                    "use_draft_pick": use_draft_pick,
+                }
+            )
+            mlflow.log_metrics(metrics_xgb)
+            log_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
+            mlflow.sklearn.log_model(best, artifact_path="xgboost")
+
+        results["XGBoost"] = {
+            "pipe": best,
+            "model": best.named_steps["xgb"],
+            "y_pred": y_pred_xgb,
+            "r2": metrics_xgb["r2"],
+            "rmse": metrics_xgb["rmse"],
+            "mae": metrics_xgb["mae"],
+            "alpha": None,
+            "importance_kind": "xgb",
+            "estimator_step": "xgb",
+        }
+
+        print(f"{'='*40}")
+        print(f"  XGBoost  (best: {gs.best_params_})")
+        print(f"  R²   = {metrics_xgb['r2']:.4f}")
+        print(f"  RMSE = {metrics_xgb['rmse']:.4f}")
+        print(f"  MAE  = {metrics_xgb['mae']:.4f}")
+
+        print(f"\n{'='*40}\n  XGBoost Feature Importances (top 10)\n{'='*40}")
+        print_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
+
+    except Exception as exc:
+        print(f"\n[WARNING] XGBoost training failed and will be skipped: {exc}")
 
     print(f"\n{'='*40}\n  Lasso Feature Importances (non-zero only)\n{'='*40}")
     print_lasso_coefficients(results["Lasso"]["pipe"], numeric_cols, categorical_cols, ordinal_cols)
-    print(f"\n{'='*40}\n  XGBoost Feature Importances (top 10)\n{'='*40}")
-    print_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
 
 
 def plot_results(results, y_test, col_info, target_mode=TARGET_MODE, plot_dir=ARTIFACT_DIR):
@@ -268,6 +273,7 @@ def _plot_regression(results, y_test, target_mode, plot_dir):
 
 def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=None, run_name=None, tracking_uri=None):
     df = load_data() if df is None else df
+    xgb_cfg = ((cfg or {}).get("model", {}).get("regression", {}).get("xgboost") or {})
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
         model_type="regression",
@@ -292,6 +298,7 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
             target_mode=target_mode,
             use_draft_pick=use_draft_pick,
             mlflow_ctx=mlflow_ctx,
+            xgb_cfg=xgb_cfg,
         )
         plot_results(results, y_test, col_info, target_mode=target_mode, plot_dir=mlflow_ctx.plot_dir)
     return results, y_test, col_info
