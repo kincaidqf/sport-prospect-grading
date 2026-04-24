@@ -189,7 +189,10 @@ def plot_model_summary(results, target_mode, task_type, artifact_dir=DEFAULT_ART
 
 
 def save_and_log(fig, filename, summary_metrics, artifact_dir=DEFAULT_ARTIFACT_DIR):
-    """Save a plot locally and log it plus summary metrics to the active MLflow run."""
+    """Save a plot locally and log summary metrics to the active MLflow run.
+
+    Per spec, only loss-curve PNGs go to MLflow as artifacts — result plots stay local.
+    """
     out_path = _artifact_path(filename, artifact_dir)
     fig.savefig(out_path, dpi=150)
     print(f"\nPlot saved to {out_path}")
@@ -197,7 +200,6 @@ def save_and_log(fig, filename, summary_metrics, artifact_dir=DEFAULT_ARTIFACT_D
     import mlflow
 
     if mlflow.active_run() is not None:
-        mlflow.log_artifact(out_path, artifact_path="plots")
         for name, metrics in summary_metrics.items():
             mlflow.log_metrics({f"{name.lower()}_{key}": value for key, value in metrics.items()})
 

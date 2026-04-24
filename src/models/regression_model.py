@@ -28,7 +28,15 @@ from src.utils.features import (
     print_lasso_coefficients,
     print_xgb_importances,
 )
-from src.utils.mlflow_utils import build_mlflow_context, log_common_params, log_config_dict, managed_run
+from src.utils.mlflow_utils import (
+    build_mlflow_context,
+    log_candidate_summary,
+    log_common_params,
+    log_config_dict,
+    log_data_summary,
+    log_reproducibility_metadata,
+    managed_run,
+)
 from src.utils.plotting import plot_feature_importance, plot_model_summary, save_and_log
 
 
@@ -106,10 +114,11 @@ def _run_regression(
     xgb_cfg=None,
 ):
     alphas = np.logspace(-3, 2, 100)
+    linear_cv_folds = 5
 
     for name, model in [
-        ("Lasso", LassoCV(alphas=alphas, cv=5, max_iter=10000, random_state=RANDOM_STATE)),
-        ("Ridge", RidgeCV(alphas=alphas, cv=5)),
+        ("Lasso", LassoCV(alphas=alphas, cv=linear_cv_folds, max_iter=10000, random_state=RANDOM_STATE)),
+        ("Ridge", RidgeCV(alphas=alphas, cv=linear_cv_folds)),
     ]:
         run_manager = managed_run(
             mlflow_ctx,
@@ -128,6 +137,11 @@ def _run_regression(
                     "model": name,
                     "target": target_mode,
                     "alpha": model.alpha_,
+                    "alpha_search_min": alphas[0],
+                    "alpha_search_max": alphas[-1],
+                    "alpha_search_n": len(alphas),
+                    "cv_folds": linear_cv_folds,
+                    "random_seed": RANDOM_STATE,
                     "n_train": len(train),
                     "n_test": len(test),
                     "use_draft_pick": use_draft_pick,
@@ -192,6 +206,9 @@ def _run_regression(
                     "model": "XGBoost",
                     "target": target_mode,
                     **{key.replace("xgb__", ""): value for key, value in gs.best_params_.items()},
+                    "cv_folds": cv_folds,
+                    "best_cv_score": round(float(gs.best_score_), 4),
+                    "random_seed": RANDOM_STATE,
                     "n_train": len(X_train),
                     "n_test": len(X_test),
                     "use_draft_pick": use_draft_pick,
@@ -209,6 +226,7 @@ def _run_regression(
             "rmse": metrics_xgb["rmse"],
             "mae": metrics_xgb["mae"],
             "alpha": None,
+            "best_cv_score": round(float(gs.best_score_), 4),
             "importance_kind": "xgb",
             "estimator_step": "xgb",
         }
@@ -290,9 +308,17 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
                 "model_family": "regression",
                 "target": target_mode,
                 "use_draft_pick": use_draft_pick,
-                "n_rows": len(df),
             }
         )
+        log_data_summary(
+            df,
+            target_col=TARGET_COL[target_mode],
+            task="regression",
+            test_size=TEST_SIZE,
+            cv_folds=5,
+            random_seed=RANDOM_STATE,
+        )
+        log_reproducibility_metadata(device="cpu")
         results, y_test, col_info = train_and_evaluate(
             df,
             target_mode=target_mode,
@@ -300,6 +326,7 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
             mlflow_ctx=mlflow_ctx,
             xgb_cfg=xgb_cfg,
         )
+        log_candidate_summary(results, task="regression")
         plot_results(results, y_test, col_info, target_mode=target_mode, plot_dir=mlflow_ctx.plot_dir)
     return results, y_test, col_info
 

@@ -199,3 +199,111 @@ def log_epoch_metrics(metrics: dict[str, float], epoch: int) -> None:
     """Log epoch-indexed metrics."""
     for key, value in metrics.items():
         mlflow.log_metric(key, float(value), step=epoch)
+
+
+def log_reproducibility_metadata(device: str = "cpu") -> None:
+    """Log Python version, key library versions, and compute device to the active run."""
+    import sys
+
+    params: dict[str, Any] = {
+        "python_version": sys.version.split()[0],
+        "device": device,
+    }
+    for lib in ("sklearn", "xgboost", "mlflow", "torch", "transformers"):
+        try:
+            mod = __import__(lib)
+            params[f"{lib}_version"] = mod.__version__
+        except ImportError:
+            pass
+    log_common_params(params)
+
+
+def log_data_summary(
+    df: Any,
+    target_col: str,
+    task: str,
+    test_size: float,
+    cv_folds: int,
+    random_seed: int,
+) -> None:
+    """Log dataset size, split config, and target distribution to the active run."""
+    n_total = len(df)
+    n_test = round(n_total * test_size)
+    n_train = n_total - n_test
+
+    params: dict[str, Any] = {
+        "n_total": n_total,
+        "n_train": n_train,
+        "n_test": n_test,
+        "test_size": test_size,
+        "cv_folds": cv_folds,
+        "random_seed": random_seed,
+        "split_type": "random",
+    }
+
+    col = df[target_col].dropna()
+    if task == "regression":
+        params.update(
+            {
+                "target_mean": round(float(col.mean()), 4),
+                "target_std": round(float(col.std()), 4),
+                "target_min": round(float(col.min()), 4),
+                "target_max": round(float(col.max()), 4),
+            }
+        )
+    elif task == "classification":
+        n_pos = int(col.sum())
+        params.update(
+            {
+                "n_positive": n_pos,
+                "n_negative": n_total - n_pos,
+                "class_balance": round(float(col.mean()), 4),
+            }
+        )
+
+    log_common_params(params)
+
+
+def log_candidate_summary(results: dict[str, Any], task: str) -> None:
+    """Log best-model params and a JSON candidate-summary artifact to the active run."""
+    import json
+    import os
+    import tempfile
+
+    selection_metric = "r2" if task == "regression" else "auc"
+
+    summary: dict[str, Any] = {}
+    for name, res in results.items():
+        if task == "regression":
+            entry: dict[str, Any] = {
+                "test_r2": res["r2"],
+                "test_rmse": res["rmse"],
+                "test_mae": res["mae"],
+            }
+        else:
+            entry = {
+                "test_accuracy": res["accuracy"],
+                "test_roc_auc": res["auc"],
+            }
+        if res.get("best_cv_score") is not None:
+            entry["best_cv_score"] = res["best_cv_score"]
+        summary[name] = entry
+
+    best_name = max(results, key=lambda n: results[n].get(selection_metric, float("-inf")))
+    log_common_params(
+        {
+            "best_model": best_name,
+            f"best_{selection_metric}": results[best_name].get(selection_metric),
+        }
+    )
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, prefix="candidate_summary_"
+    ) as f:
+        json.dump(summary, f, indent=2)
+        tmp_path = f.name
+
+    try:
+        mlflow.log_artifact(tmp_path, artifact_path="summary")
+    finally:
+        os.unlink(tmp_path)

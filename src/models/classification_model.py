@@ -25,7 +25,15 @@ from src.data.loader import (
 )
 from src.training.evaluate import classification_metrics
 from src.utils.features import log_xgb_importances, print_xgb_importances
-from src.utils.mlflow_utils import build_mlflow_context, log_common_params, log_config_dict, managed_run
+from src.utils.mlflow_utils import (
+    build_mlflow_context,
+    log_candidate_summary,
+    log_common_params,
+    log_config_dict,
+    log_data_summary,
+    log_reproducibility_metadata,
+    managed_run,
+)
 from src.utils.plotting import plot_feature_importance, plot_model_summary, save_and_log
 
 
@@ -105,6 +113,7 @@ def _run_classification(
     xgb_cfg=None,
 ):
     cs = np.logspace(-3, 2, 20)
+    linear_cv_folds = 5
 
     for name, penalty in [("LogisticL1", "l1"), ("LogisticL2", "l2")]:
         run_manager = managed_run(
@@ -116,7 +125,7 @@ def _run_classification(
         with run_manager:
             model = LogisticRegressionCV(
                 Cs=cs,
-                cv=5,
+                cv=linear_cv_folds,
                 penalty=penalty,
                 solver="saga",
                 max_iter=5000,
@@ -137,6 +146,11 @@ def _run_classification(
                     "target": target_mode,
                     "penalty": penalty,
                     "C": best_c,
+                    "C_search_min": cs[0],
+                    "C_search_max": cs[-1],
+                    "C_search_n": len(cs),
+                    "cv_folds": linear_cv_folds,
+                    "random_seed": RANDOM_STATE,
                     "n_train": len(train),
                     "n_test": len(test),
                     "use_draft_pick": use_draft_pick,
@@ -207,6 +221,9 @@ def _run_classification(
                     "model": "XGBoost",
                     "target": target_mode,
                     **{key.replace("xgb__", ""): value for key, value in gs.best_params_.items()},
+                    "cv_folds": cv_folds,
+                    "best_cv_score": round(float(gs.best_score_), 4),
+                    "random_seed": RANDOM_STATE,
                     "n_train": len(X_train),
                     "n_test": len(X_test),
                     "use_draft_pick": use_draft_pick,
@@ -224,6 +241,7 @@ def _run_classification(
             "accuracy": metrics_xgb["accuracy"],
             "auc": metrics_xgb["roc_auc"],
             "C": None,
+            "best_cv_score": round(float(gs.best_score_), 4),
             "importance_kind": "xgb",
             "estimator_step": "xgb",
         }
@@ -292,9 +310,17 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
                 "model_family": "classification",
                 "target": target_mode,
                 "use_draft_pick": use_draft_pick,
-                "n_rows": len(df),
             }
         )
+        log_data_summary(
+            df,
+            target_col=TARGET_COL[target_mode],
+            task="classification",
+            test_size=TEST_SIZE,
+            cv_folds=5,
+            random_seed=RANDOM_STATE,
+        )
+        log_reproducibility_metadata(device="cpu")
         results, y_test, col_info = train_and_evaluate(
             df,
             target_mode=target_mode,
@@ -302,6 +328,7 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
             mlflow_ctx=mlflow_ctx,
             xgb_cfg=xgb_cfg,
         )
+        log_candidate_summary(results, task="classification")
         plot_results(results, y_test, col_info, target_mode=target_mode, plot_dir=mlflow_ctx.plot_dir)
     return results, y_test, col_info
 
