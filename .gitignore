@@ -40,10 +40,13 @@ env/
 
 # MLflow
 mlruns/
-mlflow.db
+mlflow*.db
 
 # Training outputs
 outputs/
+
+# Environment
+.env
 
 # IDE and System files
 .vscode/

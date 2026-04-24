@@ -24,16 +24,11 @@ Entry point that loads YAML config, resolves compute device, and dispatches to t
 - **`trainer.py`**: Training loop for neural models with gradient clipping, checkpoint saving, and loss tracking.
 - **`evaluate.py`**: Evaluation metrics (MAE, RMSE, R², plus ranking metrics like precision@k).
 
-#### `src/data/`
-- **`dataset.py`**: PyTorch Dataset classes (`ProspectStatsDataset`, `ScoutingReportDataset`) for loading NCAA stats and tokenized scouting reports.
-- **`preprocessor.py`**: Feature engineering and train/val/test splitting with StandardScaler for numerical features.
-- **`players.csv` / `players.jsonl`**: Master prospect data with scouting ratings and attributes.
-
 #### `src/utils/`
-- **`device.py`**: Utility to detect and log compute device (CPU/GPU).
+- **`device.py`**: Detects and logs compute device (CPU / MPS / CUDA).
 
 #### `src/config/`
-- **`config.yaml`**: Centralized YAML configuration for model type, training hyperparameters, data paths, and output directory.
+- **`config.yaml`**: Centralized configuration for model type, training hyperparameters, data paths, and output directory.
 
 ### Data Processing Scripts
 
@@ -55,23 +50,19 @@ Entry point that loads YAML config, resolves compute device, and dispatches to t
 - **`ncaa_stats_master.csv`**: Aggregated NCAA statistics.
 - **`YYYY-ZZZZ.csv`**: Annual NCAA stats files.
 
-### Configuration & Infrastructure
-
-- **`Makefile`**: Build rules for common tasks.
-- **`pyproject.toml`**: Project metadata and dependencies (PyTorch, Transformers, scikit-learn, MLflow, Weights & Biases).
-- **`docker/`**: Docker configurations for containerized GPU/CPU training environments.
+### Other
 - **`notebooks/01_eda.ipynb`**: Exploratory data analysis notebook.
-- **`mlruns/`**: MLflow experiment tracking artifacts and model snapshots.
+- **`cleaning-data.md`**: Documents the NCAA stats backfill process and results.
+- **`pyproject.toml`**: Project metadata and dependencies (PyTorch, Transformers, scikit-learn, MLflow, Weights & Biases).
 
 ## Setup
 
 ### Prerequisites
 
 - Python 3.11+
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) (package manager)
-- Docker + Docker Compose (optional, for containerized runs)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) package manager
 
-### Local (recommended)
+### Install & run
 
 ```bash
 # 1. Clone the repo
@@ -92,26 +83,24 @@ uv run python src/models/regression_model.py
 uv run mlflow ui
 ```
 
-### Docker (CPU)
+### Jupyter
 
 ```bash
-make build
-make train
-```
-
-### Docker (GPU / RTX 5090)
-
-```bash
-make build-gpu
-make train-gpu
-```
-
-### Jupyter Notebook
-
-```bash
-# Local
 uv run jupyter notebook notebooks/
+```
 
-# Docker
-make notebook
+### Data backfill
+
+```bash
+# Backfill missing NCAA stats from ESPN box scores (~2GB download, ~2 min)
+uv run python data/scripts/backfill_ncaa_stats.py
+```
+
+## Device detection
+
+`src/utils/device.py` auto-detects the best available device (MPS on Apple Silicon, CUDA if available, otherwise CPU). Override via the `DEVICE` env var in `.env`:
+
+```
+DEVICE=mps   # force Apple Silicon GPU
+DEVICE=cpu   # force CPU
 ```
