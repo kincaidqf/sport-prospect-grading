@@ -14,7 +14,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--config", default="src/config/config.yaml")
     p.add_argument(
         "--model",
-        choices=["regression", "text", "multimodal"],
+        choices=["regression", "classification", "text", "multimodal"],
         default=None,
         help="Override model.type from config",
     )
@@ -49,11 +49,18 @@ def main() -> None:
 
     if model_type == "regression":
         import src.models.regression_model as rm
-        rm.TARGET_MODE  = cfg["model"]["regression"].get("target_mode", "survived_3yrs")
-        rm.USE_DRAFT_PICK = cfg["model"]["regression"].get("use_draft_pick", False)
-        df = rm.load_data()
-        results, y_test = rm.train_and_evaluate(df)
-        rm.plot_results(results, y_test)
+        regression_cfg = cfg["model"].get("regression", {})
+        rm.run(
+            target_mode=regression_cfg.get("target_mode", "plus_minus"),
+            use_draft_pick=regression_cfg.get("use_draft_pick", False),
+        )
+    elif model_type == "classification":
+        import src.models.classification_model as cm
+        classification_cfg = cfg["model"].get("classification", {})
+        cm.run(
+            target_mode=classification_cfg.get("target_mode", "survived_3yrs"),
+            use_draft_pick=classification_cfg.get("use_draft_pick", False),
+        )
     elif model_type == "text":
         # TODO: from src.training.run_text import run; run(cfg, device)
         raise NotImplementedError("text pipeline not yet implemented")

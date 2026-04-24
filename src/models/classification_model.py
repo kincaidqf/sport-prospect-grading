@@ -1,4 +1,4 @@
-"""Regression trainer for NBA draft prospect outcomes from NCAA stats."""
+"""Classification trainer for NBA draft prospect outcomes from NCAA stats."""
 from __future__ import annotations
 
 import os
@@ -7,10 +7,12 @@ import matplotlib.pyplot as plt
 import mlflow
 import mlflow.sklearn
 import numpy as np
-from sklearn.linear_model import LassoCV, RidgeCV
+from sklearn.linear_model import LogisticRegressionCV
+from sklearn.metrics import classification_report
+from sklearn.metrics import ConfusionMatrixDisplay, RocCurveDisplay
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.pipeline import Pipeline
-from xgboost import XGBRegressor
+from xgboost import XGBClassifier
 
 from src.data.loader import (
     PROJECT_ROOT,
@@ -20,27 +22,22 @@ from src.data.loader import (
     build_feature_matrix,
     load_data,
 )
-from src.training.evaluate import regression_metrics
-from src.utils.features import (
-    get_lasso_coef_df,
-    log_xgb_importances,
-    print_lasso_coefficients,
-    print_xgb_importances,
-)
+from src.training.evaluate import classification_metrics
+from src.utils.features import log_xgb_importances, print_xgb_importances
 from src.utils.plotting import plot_feature_importance, plot_model_summary, save_and_log
 
 
-MLFLOW_EXPERIMENT = "nba-draft-prospect-regression"
-REGRESSION_TARGETS = {"plus_minus"}
-TARGET_MODE = "plus_minus"
+MLFLOW_EXPERIMENT = "nba-draft-prospect-classification"
+CLASSIFICATION_TARGETS = {"became_starter", "survived_3yrs"}
+TARGET_MODE = "survived_3yrs"
 USE_DRAFT_PICK = False
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "src", "models")
 
 
 def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK):
-    if target_mode not in REGRESSION_TARGETS:
+    if target_mode not in CLASSIFICATION_TARGETS:
         raise ValueError(
-            f"regression_model only supports {sorted(REGRESSION_TARGETS)}; got {target_mode!r}"
+            f"classification_model only supports {sorted(CLASSIFICATION_TARGETS)}; got {target_mode!r}"
         )
 
     preprocessor, numeric_cols, categorical_cols, ordinal_cols = build_feature_matrix(
@@ -49,12 +46,14 @@ def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PIC
     )
     feature_cols = numeric_cols + categorical_cols + ordinal_cols
     col = TARGET_COL[target_mode]
+    y = df[col]
     train, test = train_test_split(df, test_size=TEST_SIZE, random_state=RANDOM_STATE)
 
     X_train, y_train = train[feature_cols], train[col]
     X_test, y_test = test[feature_cols], test[col]
 
     print(f"\nTarget:  {target_mode}")
+    print(f"Classes: {dict(y.value_counts().sort_index())}")
     print(f"Dataset: {len(df)} total players")
     print(f"Train:   {len(train)} | Test: {len(test)}")
     print(f"Features: {len(feature_cols)} raw columns → expanded after one-hot\n")
@@ -67,7 +66,7 @@ def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PIC
         "ordinal_cols": ordinal_cols,
     }
 
-    _run_regression(
+    _run_classification(
         preprocessor,
         numeric_cols,
         categorical_cols,
@@ -85,7 +84,7 @@ def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PIC
     return results, y_test, col_info
 
 
-def _run_regression(
+def _run_classification(
     preprocessor,
     numeric_cols,
     categorical_cols,
@@ -100,58 +99,73 @@ def _run_regression(
     use_draft_pick,
     results,
 ):
-    alphas = np.logspace(-3, 2, 100)
+    cs = np.logspace(-3, 2, 20)
 
-    for name, model in [
-        ("Lasso", LassoCV(alphas=alphas, cv=5, max_iter=10000, random_state=RANDOM_STATE)),
-        ("Ridge", RidgeCV(alphas=alphas, cv=5)),
-    ]:
+    for name, penalty in [("LogisticL1", "l1"), ("LogisticL2", "l2")]:
         with mlflow.start_run(run_name=f"{name}_{target_mode}"):
-            pipe = Pipeline([("preprocessor", preprocessor), (name.lower(), model)])
+            model = LogisticRegressionCV(
+                Cs=cs,
+                cv=5,
+                penalty=penalty,
+                solver="saga",
+                max_iter=5000,
+                random_state=RANDOM_STATE,
+                n_jobs=-1,
+            )
+            pipe = Pipeline([("preprocessor", preprocessor), ("clf", model)])
             pipe.fit(X_train, y_train)
             y_pred = pipe.predict(X_test)
-            metrics = regression_metrics(y_test, y_pred)
+            y_prob = pipe.predict_proba(X_test)[:, 1]
+
+            metrics = classification_metrics(y_test, y_pred, y_prob)
+            best_c = model.C_[0]
 
             mlflow.log_params(
                 {
                     "model": name,
                     "target": target_mode,
-                    "alpha": model.alpha_,
+                    "penalty": penalty,
+                    "C": best_c,
                     "n_train": len(train),
                     "n_test": len(test),
                     "use_draft_pick": use_draft_pick,
                 }
             )
             mlflow.log_metrics(metrics)
-
-            if name == "Lasso":
-                coef_df = get_lasso_coef_df(pipe, numeric_cols, categorical_cols, ordinal_cols)
-                mlflow.log_metric("n_nonzero_features", len(coef_df))
-
             mlflow.sklearn.log_model(pipe, artifact_path=name.lower())
+
             results[name] = {
                 "pipe": pipe,
                 "model": model,
                 "y_pred": y_pred,
-                "r2": metrics["r2"],
-                "rmse": metrics["rmse"],
-                "mae": metrics["mae"],
-                "alpha": model.alpha_,
+                "y_prob": y_prob,
+                "accuracy": metrics["accuracy"],
+                "auc": metrics["roc_auc"],
+                "C": best_c,
                 "importance_kind": "coef",
-                "estimator_step": name.lower(),
+                "estimator_step": "clf",
             }
 
             print(f"{'='*40}")
-            print(f"  {name} (alpha={model.alpha_:.4f})")
-            print(f"  R²   = {metrics['r2']:.4f}")
-            print(f"  RMSE = {metrics['rmse']:.4f}")
-            print(f"  MAE  = {metrics['mae']:.4f}")
+            print(f"  {name} (C={best_c:.4f}, penalty={penalty})")
+            print(f"  Accuracy = {metrics['accuracy']:.4f}")
+            print(f"  ROC-AUC  = {metrics['roc_auc']:.4f}")
+            print(classification_report(y_test, y_pred, target_names=["No", "Yes"], zero_division=0))
 
     xgb_preprocessor, _, _, _ = build_feature_matrix(X_train, use_draft_pick=use_draft_pick)
     xgb_base = Pipeline(
         [
             ("preprocessor", xgb_preprocessor),
-            ("xgb", XGBRegressor(random_state=RANDOM_STATE, n_jobs=-1, verbosity=0, min_child_weight=5)),
+            (
+                "xgb",
+                XGBClassifier(
+                    random_state=RANDOM_STATE,
+                    n_jobs=-1,
+                    verbosity=0,
+                    min_child_weight=5,
+                    eval_metric="logloss",
+                ),
+            ),
         ]
     )
     gs = GridSearchCV(
@@ -163,13 +177,14 @@ def _run_regression(
             "xgb__subsample": [0.7, 0.9],
         },
         cv=5,
-        scoring="r2",
+        scoring="roc_auc",
         n_jobs=-1,
     )
     gs.fit(X_train, y_train)
     best = gs.best_estimator_
     y_pred_xgb = best.predict(X_test)
-    metrics_xgb = regression_metrics(y_test, y_pred_xgb)
+    y_prob_xgb = best.predict_proba(X_test)[:, 1]
+    metrics_xgb = classification_metrics(y_test, y_pred_xgb, y_prob_xgb)
 
     with mlflow.start_run(run_name=f"XGBoost_{target_mode}"):
         mlflow.log_params(
@@ -190,64 +205,52 @@ def _run_regression(
         "pipe": best,
         "model": best.named_steps["xgb"],
         "y_pred": y_pred_xgb,
-        "r2": metrics_xgb["r2"],
-        "rmse": metrics_xgb["rmse"],
-        "mae": metrics_xgb["mae"],
-        "alpha": None,
+        "y_prob": y_prob_xgb,
+        "accuracy": metrics_xgb["accuracy"],
+        "auc": metrics_xgb["roc_auc"],
+        "C": None,
         "importance_kind": "xgb",
         "estimator_step": "xgb",
     }
 
     print(f"{'='*40}")
     print(f"  XGBoost  (best: {gs.best_params_})")
-    print(f"  R²   = {metrics_xgb['r2']:.4f}")
-    print(f"  RMSE = {metrics_xgb['rmse']:.4f}")
-    print(f"  MAE  = {metrics_xgb['mae']:.4f}")
+    print(f"  Accuracy = {metrics_xgb['accuracy']:.4f}")
+    print(f"  ROC-AUC  = {metrics_xgb['roc_auc']:.4f}")
+    print(classification_report(y_test, y_pred_xgb, target_names=["No", "Yes"], zero_division=0))
 
-    print(f"\n{'='*40}\n  Lasso Feature Importances (non-zero only)\n{'='*40}")
-    print_lasso_coefficients(results["Lasso"]["pipe"], numeric_cols, categorical_cols, ordinal_cols)
     print(f"\n{'='*40}\n  XGBoost Feature Importances (top 10)\n{'='*40}")
     print_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
 
 
 def plot_results(results, y_test, col_info, target_mode=TARGET_MODE):
-    _plot_regression(results, y_test, target_mode)
+    _plot_classification(results, y_test, target_mode)
     plot_feature_importance(results, col_info, target_mode, artifact_dir=ARTIFACT_DIR)
-    plot_model_summary(results, target_mode, "regression", artifact_dir=ARTIFACT_DIR)
+    plot_model_summary(results, target_mode, "classification", artifact_dir=ARTIFACT_DIR)
 
 
-def _plot_regression(results, y_test, target_mode):
+def _plot_classification(results, y_test, target_mode):
     n = len(results)
-    fig, axes = plt.subplots(2, n, figsize=(6 * n, 10))
-    fig.suptitle(f"NBA {target_mode} Prediction from College Stats", fontsize=14, fontweight="bold")
+    fig, axes = plt.subplots(2, n, figsize=(5 * n, 9))
+    fig.suptitle(f"NBA {target_mode} Classification from College Stats", fontsize=13, fontweight="bold")
 
-    for col_idx, (name, res) in enumerate(results.items()):
-        y_pred = res["y_pred"]
+    for col, (name, res) in enumerate(results.items()):
+        ConfusionMatrixDisplay.from_predictions(
+            y_test,
+            res["y_pred"],
+            display_labels=["No", "Yes"],
+            ax=axes[0][col],
+        )
+        axes[0][col].set_title(f"{name}\nAcc={res['accuracy']:.3f}")
 
-        ax = axes[0][col_idx]
-        ax.scatter(y_test, y_pred, alpha=0.5, s=30, edgecolors="none")
-        lim = max(abs(y_test.min()), abs(y_test.max()), abs(np.min(y_pred)), abs(np.max(y_pred))) + 1
-        ax.plot([-lim, lim], [-lim, lim], "r--", linewidth=1, label="Perfect")
-        ax.set_xlabel("Actual")
-        ax.set_ylabel("Predicted")
-        ax.set_title(f"{name}  (R²={res['r2']:.3f})")
-        ax.legend(fontsize=8)
-        ax.set_xlim(-lim, lim)
-        ax.set_ylim(-lim, lim)
-
-        ax2 = axes[1][col_idx]
-        residuals = y_test - y_pred
-        ax2.scatter(y_pred, residuals, alpha=0.5, s=30, edgecolors="none")
-        ax2.axhline(0, color="r", linestyle="--", linewidth=1)
-        ax2.set_xlabel("Predicted")
-        ax2.set_ylabel("Residual (Actual - Predicted)")
-        ax2.set_title(f"{name} Residuals")
+        RocCurveDisplay.from_predictions(y_test, res["y_prob"], ax=axes[1][col], name=name)
+        axes[1][col].set_title(f"ROC  AUC={res['auc']:.3f}")
 
     plt.tight_layout()
     save_and_log(
         fig,
-        "regression_results.png",
-        {name: {"r2": res["r2"], "rmse": res["rmse"], "mae": res["mae"]} for name, res in results.items()},
+        "classification_results.png",
+        {name: {"accuracy": res["accuracy"], "roc_auc": res["auc"]} for name, res in results.items()},
         MLFLOW_EXPERIMENT,
         target_mode,
         artifact_dir=ARTIFACT_DIR,

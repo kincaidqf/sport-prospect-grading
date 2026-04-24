@@ -2,15 +2,18 @@ defaults:
   - _self_
 
 model:
-  type: regression          # regression | text | multimodal
+  type: regression          # regression | classification | text | multimodal
   regression:
-    target_mode: survived_3yrs  # plus_minus | became_starter | survived_3yrs
+    target_mode: plus_minus      # plus_minus
     use_draft_pick: false        # include draft pick as a feature (leaks scout judgment)
     alpha_min: 1e-4         # lasso alpha search range
     alpha_max: 1e2
     alpha_steps: 100
     max_iter: 10000
     cv_folds: 5
+  classification:
+    target_mode: survived_3yrs  # became_starter | survived_3yrs
+    use_draft_pick: false       # include draft pick as a feature (leaks scout judgment)
   text:
     pretrained: "distilbert-base-uncased"
     max_length: 512

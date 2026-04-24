@@ -13,16 +13,20 @@ Predict NBA draft success using:
 ### Core Modules
 
 #### `src/main.py`
-Entry point that loads YAML config, resolves compute device, and dispatches to the selected model pipeline (regression, text, or multimodal).
+Entry point that loads YAML config, resolves compute device, and dispatches to the selected model pipeline (regression, classification, text, or multimodal).
 
 #### `src/models/`
 - **`regression_model.py`**: Lasso/Ridge regression model predicting NBA PLUS_MINUS (best season) from final-year NCAA college stats. Uses Lasso for feature selection due to high multicollinearity.
+- **`classification_model.py`**: Logistic/XGBoost classification models for binary draft outcomes like `became_starter` and `survived_3yrs`.
 - **`text_model.py`**: NLP encoder (ScoutingReportEncoder) for fine-tuning transformer models on scouting report texts.
 - **`multimodal_model.py`**: Combines NCAA stats features + scouting report embeddings for joint prediction.
 
 #### `src/training/`
 - **`trainer.py`**: Training loop for neural models with gradient clipping, checkpoint saving, and loss tracking.
 - **`evaluate.py`**: Evaluation metrics (MAE, RMSE, R², plus ranking metrics like precision@k).
+- **`src/data/loader.py`**: Shared tabular data loading, target derivation, feature engineering, and sklearn preprocessing for stats-based models.
+- **`src/utils/features.py`**: Shared feature-name expansion and feature-importance helpers.
+- **`src/utils/plotting.py`**: Shared model-summary and feature-importance plotting utilities.
 
 #### `src/utils/`
 - **`device.py`**: Detects and logs compute device (CPU / MPS / CUDA).
@@ -79,7 +83,10 @@ cp .env.example .env
 # 4. Run the regression model
 uv run python src/models/regression_model.py
 
-# 5. (Optional) Launch the MLflow UI to inspect runs
+# 5. Run the classification model
+uv run python src/models/classification_model.py
+
+# 6. (Optional) Launch the MLflow UI to inspect runs
 uv run mlflow ui
 ```
 
