@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import os
+import platform
+import sys
 from pathlib import Path
 
 import yaml
@@ -30,6 +33,40 @@ def load_config(path: str) -> dict:
         return yaml.safe_load(f)
 
 
+def _ensure_macos_openmp_for_xgboost(model_type: str) -> None:
+    """Restart with a known OpenMP path when macOS XGBoost cannot find libomp."""
+    if model_type not in {"regression", "classification"}:
+        return
+    if platform.system() != "Darwin":
+        return
+    if os.environ.get("XGBOOST_OPENMP_REEXECED") == "1":
+        return
+
+    fallback_var = "DYLD_FALLBACK_LIBRARY_PATH"
+    existing_paths = os.environ.get(fallback_var, "").split(os.pathsep)
+    candidates = [
+        Path("/opt/homebrew/opt/libomp/lib/libomp.dylib"),
+        Path("/usr/local/opt/libomp/lib/libomp.dylib"),
+        Path("/opt/miniconda3/lib/libomp.dylib"),
+        Path.home() / "miniconda3/lib/libomp.dylib",
+        Path.home() / "anaconda3/lib/libomp.dylib",
+    ]
+    for libomp_path in candidates:
+        if not libomp_path.exists():
+            continue
+        libomp_dir = str(libomp_path.parent)
+        if libomp_dir in existing_paths:
+            return
+
+        env = os.environ.copy()
+        env["XGBOOST_OPENMP_REEXECED"] = "1"
+        env[fallback_var] = os.pathsep.join(
+            [libomp_dir, *[path for path in existing_paths if path]]
+        )
+        print(f"[xgboost] restarting with {fallback_var}={libomp_dir}", flush=True)
+        os.execve(sys.executable, [sys.executable, *sys.argv], env)
+
+
 def main() -> None:
     args = parse_args()
     cfg = load_config(args.config)
@@ -41,10 +78,12 @@ def main() -> None:
     if args.output_dir:
         cfg["output"]["dir"] = args.output_dir
 
+    model_type = cfg["model"]["type"]
+    _ensure_macos_openmp_for_xgboost(model_type)
+
     device = get_device()
     log_device_info(device)
 
-    model_type = cfg["model"]["type"]
     print(f"[config] model: {model_type}")
     print(f"[config] epochs: {cfg['training']['epochs']}")
     print(f"[config] output: {cfg['output']['dir']}")

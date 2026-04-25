@@ -185,30 +185,11 @@ def _run_classification(
         "xgb__subsample": cfg.get("subsample", [0.7, 0.9]),
     }
     cv_folds = cfg.get("cv_folds", 5)
+    xgb_n_jobs = cfg.get("n_jobs", 1)
+    grid_n_jobs = cfg.get("grid_n_jobs", 1)
+    pre_dispatch = cfg.get("pre_dispatch", 1)
 
     try:
-        xgb_base = Pipeline(
-            [
-                ("preprocessor", clone(preprocessor)),
-                (
-                    "xgb",
-                    XGBClassifier(
-                        random_state=RANDOM_STATE,
-                        n_jobs=-1,
-                        verbosity=0,
-                        min_child_weight=5,
-                        eval_metric="logloss",
-                    ),
-                ),
-            ]
-        )
-        gs = GridSearchCV(xgb_base, param_grid, cv=cv_folds, scoring="roc_auc", n_jobs=-1)
-        gs.fit(X_train, y_train)
-        best = gs.best_estimator_
-        y_pred_xgb = best.predict(X_test)
-        y_prob_xgb = best.predict_proba(X_test)[:, 1]
-        metrics_xgb = classification_metrics(y_test, y_pred_xgb, y_prob_xgb)
-
         run_manager = managed_run(
             mlflow_ctx,
             run_name=f"{mlflow_ctx.parent_run_name}__xgboost",
@@ -220,13 +201,53 @@ def _run_classification(
                 {
                     "model": "XGBoost",
                     "target": target_mode,
-                    **{key.replace("xgb__", ""): value for key, value in gs.best_params_.items()},
                     "cv_folds": cv_folds,
-                    "best_cv_score": round(float(gs.best_score_), 4),
+                    "xgb_n_jobs": xgb_n_jobs,
+                    "grid_n_jobs": grid_n_jobs,
+                    "pre_dispatch": pre_dispatch,
+                    "n_estimators_grid": param_grid["xgb__n_estimators"],
+                    "max_depth_grid": param_grid["xgb__max_depth"],
+                    "learning_rate_grid": param_grid["xgb__learning_rate"],
+                    "subsample_grid": param_grid["xgb__subsample"],
                     "random_seed": RANDOM_STATE,
                     "n_train": len(X_train),
                     "n_test": len(X_test),
                     "use_draft_pick": use_draft_pick,
+                }
+            )
+            xgb_base = Pipeline(
+                [
+                    ("preprocessor", clone(preprocessor)),
+                    (
+                        "xgb",
+                        XGBClassifier(
+                            random_state=RANDOM_STATE,
+                            n_jobs=xgb_n_jobs,
+                            verbosity=0,
+                            min_child_weight=5,
+                            eval_metric="logloss",
+                        ),
+                    ),
+                ]
+            )
+            gs = GridSearchCV(
+                xgb_base,
+                param_grid,
+                cv=cv_folds,
+                scoring="roc_auc",
+                n_jobs=grid_n_jobs,
+                pre_dispatch=pre_dispatch,
+            )
+            gs.fit(X_train, y_train)
+            best = gs.best_estimator_
+            y_pred_xgb = best.predict(X_test)
+            y_prob_xgb = best.predict_proba(X_test)[:, 1]
+            metrics_xgb = classification_metrics(y_test, y_pred_xgb, y_prob_xgb)
+
+            log_common_params(
+                {
+                    **{key.replace("xgb__", ""): value for key, value in gs.best_params_.items()},
+                    "best_cv_score": round(float(gs.best_score_), 4),
                 }
             )
             mlflow.log_metrics(metrics_xgb)
@@ -256,7 +277,9 @@ def _run_classification(
         print_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
 
     except Exception as exc:
+        import traceback
         print(f"\n[WARNING] XGBoost training failed and will be skipped: {exc}")
+        traceback.print_exc()
 
 
 def plot_results(results, y_test, col_info, target_mode=TARGET_MODE, plot_dir=ARTIFACT_DIR):

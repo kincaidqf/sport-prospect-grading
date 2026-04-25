@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import os
 
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -70,7 +73,7 @@ def plot_feature_importance(results, col_info, target_mode, artifact_dir=DEFAULT
     out_path = _artifact_path("feature_importance.png", artifact_dir)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     print(f"\nPlot saved to {out_path}")
-    plt.show()
+    plt.close(fig)
 
     plot_importance_heatmap(importance_data, target_mode, artifact_dir)
 
@@ -125,7 +128,7 @@ def plot_importance_heatmap(importance_data, target_mode, artifact_dir=DEFAULT_A
     out_path = _artifact_path("importance_heatmap.png", artifact_dir)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     print(f"Plot saved to {out_path}")
-    plt.show()
+    plt.close(fig)
 
 
 def plot_model_summary(results, target_mode, task_type, artifact_dir=DEFAULT_ARTIFACT_DIR):
@@ -185,7 +188,7 @@ def plot_model_summary(results, target_mode, task_type, artifact_dir=DEFAULT_ART
     out_path = _artifact_path("model_summary.png", artifact_dir)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     print(f"Plot saved to {out_path}")
-    plt.show()
+    plt.close(fig)
 
 
 def save_and_log(fig, filename, summary_metrics, artifact_dir=DEFAULT_ARTIFACT_DIR):
@@ -203,4 +206,4 @@ def save_and_log(fig, filename, summary_metrics, artifact_dir=DEFAULT_ARTIFACT_D
         for name, metrics in summary_metrics.items():
             mlflow.log_metrics({f"{name.lower()}_{key}": value for key, value in metrics.items()})
 
-    plt.show()
+    plt.close(fig)

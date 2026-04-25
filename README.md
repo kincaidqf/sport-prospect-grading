@@ -56,7 +56,7 @@ sport-prospect-grading/
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.11 or 3.12
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) package manager
 
 ### Install
@@ -143,6 +143,9 @@ model:
       learning_rate: [0.05, 0.1]
       subsample: [0.8]
       cv_folds: 3                 # CV folds for XGBoost grid search
+      n_jobs: 1                    # XGBoost worker threads; keep 1 on macOS for stability
+      grid_n_jobs: 1               # GridSearchCV worker processes
+      pre_dispatch: 1              # Jobs queued ahead of active workers
 ```
 
 Trains three models: **Lasso**, **Ridge**, **XGBoost**. Each gets its own nested MLflow run under the parent. XGBoost uses `GridSearchCV` over the values listed above.
@@ -160,9 +163,14 @@ model:
       learning_rate: [0.05, 0.1]
       subsample: [0.8]
       cv_folds: 3
+      n_jobs: 1
+      grid_n_jobs: 1
+      pre_dispatch: 1
 ```
 
 Trains three models: **LogisticL1**, **LogisticL2**, **XGBoost**. Target can be switched to `became_starter` to change the binary outcome being predicted.
+
+On macOS, XGBoost needs an OpenMP runtime (`libomp.dylib`). The CLI will automatically restart tabular runs with `DYLD_FALLBACK_LIBRARY_PATH` when it finds `libomp` in common Homebrew or Conda locations.
 
 ### Text model (`--model text`)
 

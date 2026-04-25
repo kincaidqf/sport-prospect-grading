@@ -9,7 +9,7 @@ packages = ["src"]
 name = "nba-draft-ml"
 version = "0.1.0"
 description = "NBA Draft Prospect ML Research"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 
 dependencies = [
     "torch",

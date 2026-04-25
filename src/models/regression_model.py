@@ -180,20 +180,11 @@ def _run_regression(
         "xgb__subsample": cfg.get("subsample", [0.7, 0.9]),
     }
     cv_folds = cfg.get("cv_folds", 5)
+    xgb_n_jobs = cfg.get("n_jobs", 1)
+    grid_n_jobs = cfg.get("grid_n_jobs", 1)
+    pre_dispatch = cfg.get("pre_dispatch", 1)
 
     try:
-        xgb_base = Pipeline(
-            [
-                ("preprocessor", clone(preprocessor)),
-                ("xgb", XGBRegressor(random_state=RANDOM_STATE, n_jobs=-1, verbosity=0, min_child_weight=5)),
-            ]
-        )
-        gs = GridSearchCV(xgb_base, param_grid, cv=cv_folds, scoring="r2", n_jobs=-1)
-        gs.fit(X_train, y_train)
-        best = gs.best_estimator_
-        y_pred_xgb = best.predict(X_test)
-        metrics_xgb = regression_metrics(y_test, y_pred_xgb)
-
         run_manager = managed_run(
             mlflow_ctx,
             run_name=f"{mlflow_ctx.parent_run_name}__xgboost",
@@ -205,13 +196,51 @@ def _run_regression(
                 {
                     "model": "XGBoost",
                     "target": target_mode,
-                    **{key.replace("xgb__", ""): value for key, value in gs.best_params_.items()},
                     "cv_folds": cv_folds,
-                    "best_cv_score": round(float(gs.best_score_), 4),
+                    "xgb_n_jobs": xgb_n_jobs,
+                    "grid_n_jobs": grid_n_jobs,
+                    "pre_dispatch": pre_dispatch,
+                    "n_estimators_grid": param_grid["xgb__n_estimators"],
+                    "max_depth_grid": param_grid["xgb__max_depth"],
+                    "learning_rate_grid": param_grid["xgb__learning_rate"],
+                    "subsample_grid": param_grid["xgb__subsample"],
                     "random_seed": RANDOM_STATE,
                     "n_train": len(X_train),
                     "n_test": len(X_test),
                     "use_draft_pick": use_draft_pick,
+                }
+            )
+            xgb_base = Pipeline(
+                [
+                    ("preprocessor", clone(preprocessor)),
+                    (
+                        "xgb",
+                        XGBRegressor(
+                            random_state=RANDOM_STATE,
+                            n_jobs=xgb_n_jobs,
+                            verbosity=0,
+                            min_child_weight=5,
+                        ),
+                    ),
+                ]
+            )
+            gs = GridSearchCV(
+                xgb_base,
+                param_grid,
+                cv=cv_folds,
+                scoring="r2",
+                n_jobs=grid_n_jobs,
+                pre_dispatch=pre_dispatch,
+            )
+            gs.fit(X_train, y_train)
+            best = gs.best_estimator_
+            y_pred_xgb = best.predict(X_test)
+            metrics_xgb = regression_metrics(y_test, y_pred_xgb)
+
+            log_common_params(
+                {
+                    **{key.replace("xgb__", ""): value for key, value in gs.best_params_.items()},
+                    "best_cv_score": round(float(gs.best_score_), 4),
                 }
             )
             mlflow.log_metrics(metrics_xgb)
@@ -241,7 +270,9 @@ def _run_regression(
         print_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
 
     except Exception as exc:
+        import traceback
         print(f"\n[WARNING] XGBoost training failed and will be skipped: {exc}")
+        traceback.print_exc()
 
     print(f"\n{'='*40}\n  Lasso Feature Importances (non-zero only)\n{'='*40}")
     print_lasso_coefficients(results["Lasso"]["pipe"], numeric_cols, categorical_cols, ordinal_cols)
