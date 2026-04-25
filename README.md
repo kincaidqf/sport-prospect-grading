@@ -172,6 +172,19 @@ Trains three models: **LogisticL1**, **LogisticL2**, **XGBoost**. Target can be 
 
 On macOS, XGBoost needs an OpenMP runtime (`libomp.dylib`). The CLI will automatically restart tabular runs with `DYLD_FALLBACK_LIBRARY_PATH` when it finds `libomp` in common Homebrew or Conda locations.
 
+### Known issue: XGBoost runs stuck in MLflow
+
+Regression and classification runs previously appeared to hang at `Running` in the MLflow UI, with no XGBoost output and no PNGs under `outputs/plots/{run_name}/`. The process was not hanging in Python; it was crashing during the XGBoost phase before the parent MLflow run context could close. Because plot generation happens after model training returns, the crash also prevented result plots from being written.
+
+The fix is implemented in code and config:
+- XGBoost now runs inside its own nested MLflow child run, so XGBoost work is tracked under `...__xgboost`.
+- XGBoost and `GridSearchCV` default to single-worker execution through `n_jobs: 1`, `grid_n_jobs: 1`, and `pre_dispatch: 1`, avoiding unstable nested native parallelism.
+- The project is pinned to Python 3.11/3.12 instead of floating to Python 3.13.
+- Plotting uses the non-interactive Matplotlib `Agg` backend and closes figures after saving, so training scripts do not block on GUI display.
+- On macOS, `src/main.py` restarts tabular runs with a `DYLD_FALLBACK_LIBRARY_PATH` pointing at a detected `libomp.dylib` when needed by XGBoost.
+
+If old runs still show `Running`, they are stale records from a process that crashed before MLflow could mark them finished. New runs should complete normally and write plots to `outputs/plots/{run_name}/`.
+
 ### Text model (`--model text`)
 
 ```yaml
