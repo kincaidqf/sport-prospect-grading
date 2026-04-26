@@ -40,7 +40,7 @@ from src.utils.plotting import plot_feature_importance, plot_model_summary, save
 MLFLOW_EXPERIMENT = "nba-draft-prospect-classification"
 CLASSIFICATION_TARGETS = {"became_starter", "prospect_tier"}
 TARGET_MODE = "prospect_tier"
-TIER_NAMES = ["Bust", "Fringe", "Solid", "Star"]
+TIER_NAMES = ["Bust", "Contributor", "Star"]
 USE_DRAFT_PICK = False
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
 
@@ -224,7 +224,7 @@ def _run_classification(
                 }
             )
             xgb_extra = (
-                {"objective": "multi:softprob", "num_class": 4, "eval_metric": "mlogloss"}
+                {"objective": "multi:softprob", "num_class": len(TIER_NAMES), "eval_metric": "mlogloss"}
                 if is_multiclass
                 else {"objective": "binary:logistic", "eval_metric": "logloss"}
             )
@@ -327,10 +327,10 @@ def _plot_classification(results, y_test, target_mode, plot_dir):
 
         if is_multiclass:
             ax = axes[1][col]
-            x = np.arange(4)
+            x = np.arange(len(TIER_NAMES))
             width = 0.35
-            actual_counts  = [int(np.sum(y_test_arr == i)) for i in range(4)]
-            pred_counts    = [int(np.sum(res["y_pred"] == i)) for i in range(4)]
+            actual_counts  = [int(np.sum(y_test_arr == i)) for i in range(len(TIER_NAMES))]
+            pred_counts    = [int(np.sum(res["y_pred"] == i)) for i in range(len(TIER_NAMES))]
             ax.bar(x - width / 2, actual_counts, width, label="Actual",    color="#3498db")
             ax.bar(x + width / 2, pred_counts,   width, label="Predicted", color="#e67e22")
             ax.set_xticks(x)

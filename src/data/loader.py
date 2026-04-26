@@ -144,7 +144,7 @@ def load_data(composite_cfg=None):
     w_min            = _cfg.get("w_min", 0.35)
     w_gp             = _cfg.get("w_gp", 0.25)
     w_pm             = _cfg.get("w_plus_minus", 0.40)
-    tier_percentiles = tuple(_cfg.get("tier_percentiles", (25, 50, 75)))
+    tier_percentiles = tuple(_cfg.get("tier_percentiles", (40, 80)))
     nan_floor        = float(_cfg.get("nan_floor", -3.0))
 
     # Derived targets

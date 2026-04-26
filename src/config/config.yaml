@@ -4,11 +4,11 @@ defaults:
 model:
   type: regression          # regression | classification | text | multimodal
   composite_score:          # shared by both regression and classification targets
-    w_min: 0.35             # weight for NBA minutes per game z-score
-    w_gp: 0.25              # weight for NBA games played z-score
-    w_plus_minus: 0.40      # weight for NBA plus/minus z-score
-    tier_percentiles: [25, 50, 75]  # percentile cut points for bust/fringe/solid/star (classification only)
-    nan_floor: -3.0         # composite score assigned to players with no NBA data
+    w_min: 0.55            # weight for NBA minutes per game z-score
+    w_gp: 0.30             # weight for NBA games played z-score
+    w_plus_minus: 0.15     # weight for NBA plus/minus z-score
+    tier_percentiles: [40, 80]  # percentile cut points for bust/contributor/star (40/40/20 split)
+    nan_floor: -3.0        # composite score assigned to players with no NBA data
   regression:
     target_mode: composite_score  # plus_minus | composite_score
     use_draft_pick: false        # include draft pick as a feature (leaks scout judgment)
