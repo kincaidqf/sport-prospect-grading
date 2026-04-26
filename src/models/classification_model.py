@@ -23,7 +23,7 @@ from src.data.loader import (
     build_feature_matrix,
     load_data,
 )
-from src.training.evaluate import classification_metrics
+from src.training.evaluate import classification_metrics, cost_sensitive_predict, mean_cost
 from src.utils.features import log_xgb_importances, print_xgb_importances
 from src.utils.mlflow_utils import (
     build_mlflow_context,
@@ -43,6 +43,15 @@ TARGET_MODE = "prospect_tier"
 TIER_NAMES = ["Bust", "Contributor", "Star"]
 USE_DRAFT_PICK = False
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
+
+# Cost matrix for ordinal 3-tier classes (Bust=0, Contributor=1, Star=2).
+# cost[true, predicted]: a two-step error (Bust↔Star) costs 3× more than a
+# one-step error (Bust↔Contributor or Contributor↔Star).
+ORDINAL_COST_MATRIX = np.array([
+    [0, 1, 3],  # true=Bust
+    [1, 0, 1],  # true=Contributor
+    [3, 1, 0],  # true=Star
+], dtype=float)
 
 
 def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, mlflow_ctx=None, xgb_cfg=None):
@@ -138,11 +147,19 @@ def _run_classification(
             )
             pipe = Pipeline([("preprocessor", preprocessor), ("clf", model)])
             pipe.fit(X_train, y_train)
-            y_pred = pipe.predict(X_test)
             proba  = pipe.predict_proba(X_test)
             y_prob = proba if is_multiclass else proba[:, 1]
+            y_pred = (
+                cost_sensitive_predict(proba, ORDINAL_COST_MATRIX)
+                if is_multiclass
+                else pipe.predict(X_test)
+            )
 
             metrics = classification_metrics(y_test, y_pred, y_prob)
+            if is_multiclass:
+                metrics["mean_cost"] = mean_cost(
+                    np.asarray(y_test), y_pred, ORDINAL_COST_MATRIX
+                )
             best_c = model.C_[0]
 
             log_common_params(
@@ -159,6 +176,7 @@ def _run_classification(
                     "n_train": len(train),
                     "n_test": len(test),
                     "use_draft_pick": use_draft_pick,
+                    "cost_sensitive": is_multiclass,
                 }
             )
             mlflow.log_metrics(metrics)
@@ -172,6 +190,7 @@ def _run_classification(
                 "accuracy": metrics["accuracy"],
                 "auc": metrics["auc"],
                 "f1_macro": metrics.get("f1_macro", 0.0),
+                "mean_cost": metrics.get("mean_cost"),
                 "C": best_c,
                 "importance_kind": "coef",
                 "estimator_step": "clf",
@@ -182,6 +201,7 @@ def _run_classification(
             print(f"  Accuracy = {metrics['accuracy']:.4f}")
             if is_multiclass:
                 print(f"  F1-macro = {metrics['f1_macro']:.4f}")
+                print(f"  MeanCost = {metrics['mean_cost']:.4f}  (cost-sensitive predictions)")
             print(f"  AUC      = {metrics['auc']:.4f}")
             print(classification_report(y_test, y_pred, target_names=tier_labels, zero_division=0))
 
@@ -253,15 +273,24 @@ def _run_classification(
             )
             gs.fit(X_train, y_train)
             best = gs.best_estimator_
-            y_pred_xgb = best.predict(X_test)
             proba_xgb  = best.predict_proba(X_test)
             y_prob_xgb = proba_xgb if is_multiclass else proba_xgb[:, 1]
+            y_pred_xgb = (
+                cost_sensitive_predict(proba_xgb, ORDINAL_COST_MATRIX)
+                if is_multiclass
+                else best.predict(X_test)
+            )
             metrics_xgb = classification_metrics(y_test, y_pred_xgb, y_prob_xgb)
+            if is_multiclass:
+                metrics_xgb["mean_cost"] = mean_cost(
+                    np.asarray(y_test), y_pred_xgb, ORDINAL_COST_MATRIX
+                )
 
             log_common_params(
                 {
                     **{key.replace("xgb__", ""): value for key, value in gs.best_params_.items()},
                     "best_cv_score": round(float(gs.best_score_), 4),
+                    "cost_sensitive": is_multiclass,
                 }
             )
             mlflow.log_metrics(metrics_xgb)
@@ -276,6 +305,7 @@ def _run_classification(
             "accuracy": metrics_xgb["accuracy"],
             "auc": metrics_xgb["auc"],
             "f1_macro": metrics_xgb.get("f1_macro", 0.0),
+            "mean_cost": metrics_xgb.get("mean_cost"),
             "C": None,
             "best_cv_score": round(float(gs.best_score_), 4),
             "importance_kind": "xgb",
@@ -287,6 +317,7 @@ def _run_classification(
         print(f"  Accuracy = {metrics_xgb['accuracy']:.4f}")
         if is_multiclass:
             print(f"  F1-macro = {metrics_xgb['f1_macro']:.4f}")
+            print(f"  MeanCost = {metrics_xgb['mean_cost']:.4f}  (cost-sensitive predictions)")
         print(f"  AUC      = {metrics_xgb['auc']:.4f}")
         print(classification_report(y_test, y_pred_xgb, target_names=tier_labels, zero_division=0))
 

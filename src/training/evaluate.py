@@ -47,6 +47,25 @@ def ranking_metrics(y_true: np.ndarray, y_pred: np.ndarray, k: int = 10) -> dict
     raise NotImplementedError
 
 
+def mean_cost(y_true: np.ndarray, y_pred: np.ndarray, cost_matrix: np.ndarray) -> float:
+    """Return average cost incurred per prediction under the given cost matrix.
+
+    cost_matrix[i, j] = penalty when true class is i and predicted class is j.
+    """
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    costs = cost_matrix[y_true, y_pred]
+    return float(np.mean(costs))
+
+
+def cost_sensitive_predict(proba: np.ndarray, cost_matrix: np.ndarray) -> np.ndarray:
+    """Return the class that minimises expected cost given predicted probabilities.
+
+    For each sample, picks argmin_c sum_i P(true=i|x) * cost_matrix[i, c].
+    """
+    return np.argmin(np.asarray(proba) @ cost_matrix, axis=1)
+
+
 def print_metrics(metrics: dict, prefix: str = "") -> None:
     label = f"[{prefix}] " if prefix else ""
     for k, v in metrics.items():
