@@ -103,7 +103,7 @@ def assign_conf_tier(team):
     return 0
 
 
-def _compute_composite_score(df, w_min=0.30, w_gp=0.15, w_pm=0.55, nan_floor=-3.0):
+def _compute_composite_score(df, w_min=0.55, w_gp=0.3, w_pm=0.15, nan_floor=-3.0):
     """Weighted z-score composite of NBA MIN, GP, and PLUS_MINUS.
 
     Players with no NBA data (all three stats NaN) receive nan_floor so they
@@ -117,8 +117,8 @@ def _compute_composite_score(df, w_min=0.30, w_gp=0.15, w_pm=0.55, nan_floor=-3.
     return composite.fillna(nan_floor)
 
 
-def _assign_tier(composite, percentiles=(25, 50, 75)):
-    """Bin composite scores into 0=Bust, 1=Fringe, 2=Solid, 3=Star.
+def _assign_tier(composite, percentiles=(40, 80)):
+    """Bin composite scores into 0=Bust, 1=Contributor, 2=Star (40/40/20 split).
 
     Cut points are derived from the given percentiles of the composite
     distribution, making it easy to shift tier boundaries via config.
