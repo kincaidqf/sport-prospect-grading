@@ -9,11 +9,13 @@ import mlflow
 def get_all_feature_names(pipe, numeric_cols, categorical_cols, ordinal_cols):
     """Resolve expanded feature names after preprocessing."""
     preprocessor = pipe.named_steps["preprocessor"]
-    cat_names = list(
-        preprocessor.named_transformers_["cat"]
-        .named_steps["onehot"]
-        .get_feature_names_out(categorical_cols)
-    )
+    cat_names = []
+    if categorical_cols:
+        cat_names = list(
+            preprocessor.named_transformers_["cat"]
+            .named_steps["onehot"]
+            .get_feature_names_out(categorical_cols)
+        )
     return list(numeric_cols) + cat_names + list(ordinal_cols)
 
 

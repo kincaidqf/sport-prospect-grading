@@ -48,6 +48,7 @@ NUMERIC_FEATURES = [
 
 DRAFT_PICK_FEATURE = "draft_pick"
 HEIGHT_FEATURE     = "Ht"
+HEIGHT_DEV_FEATURE = "height_dev"
 CLASS_FEATURE      = "Cl"
 CLASS_ORDER        = [["Fr.", "So.", "Jr.", "Sr."]]
 POSITION_FEATURE   = "Pos"
@@ -156,6 +157,9 @@ def load_data(composite_cfg=None):
     df["height_in"] = df[HEIGHT_FEATURE].apply(parse_height)
     df[CLASS_FEATURE]    = df[CLASS_FEATURE].str.strip().replace({"Fr": "Fr.", "So": "So.", "Jr": "Jr.", "Sr": "Sr."})
     df[POSITION_FEATURE] = df[POSITION_FEATURE].str.strip()
+
+    pos_avg_ht = df.groupby(POSITION_FEATURE)["height_in"].transform("mean")
+    df[HEIGHT_DEV_FEATURE] = (df["height_in"] - pos_avg_ht).abs()
     df[CONF_FEATURE]     = df["Team"].apply(assign_conf_tier)
 
     g = df["G"].replace(0, np.nan)
@@ -205,26 +209,28 @@ def load_data(composite_cfg=None):
 # ── Feature matrix ─────────────────────────────────────────────────────────────
 
 def build_feature_matrix(df, use_draft_pick=False):
-    numeric_cols     = NUMERIC_FEATURES + ["height_in", CONF_FEATURE]
+    numeric_cols     = NUMERIC_FEATURES + [HEIGHT_DEV_FEATURE, CONF_FEATURE]
     if use_draft_pick:
         numeric_cols = numeric_cols + [DRAFT_PICK_FEATURE]
-    categorical_cols = [POSITION_FEATURE]
+    categorical_cols = []
     ordinal_cols     = [CLASS_FEATURE]
 
-    preprocessor = ColumnTransformer([
+    transformers = [
         ("num", Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
             ("scaler",  StandardScaler()),
         ]), numeric_cols),
-        ("cat", Pipeline([
+    ]
+    if categorical_cols:
+        transformers.append(("cat", Pipeline([
             ("imputer", SimpleImputer(strategy="most_frequent")),
             ("onehot",  OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
-        ]), categorical_cols),
-        ("ord", Pipeline([
-            ("imputer",  SimpleImputer(strategy="most_frequent")),
-            ("ordinal",  OrdinalEncoder(categories=CLASS_ORDER, handle_unknown="use_encoded_value", unknown_value=-1)),
-            ("scaler",   StandardScaler()),
-        ]), ordinal_cols),
-    ])
+        ]), categorical_cols))
+    transformers.append(("ord", Pipeline([
+        ("imputer",  SimpleImputer(strategy="most_frequent")),
+        ("ordinal",  OrdinalEncoder(categories=CLASS_ORDER, handle_unknown="use_encoded_value", unknown_value=-1)),
+        ("scaler",   StandardScaler()),
+    ]), ordinal_cols))
+    preprocessor = ColumnTransformer(transformers)
 
     return preprocessor, numeric_cols, categorical_cols, ordinal_cols
