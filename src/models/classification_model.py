@@ -38,8 +38,9 @@ from src.utils.plotting import plot_feature_importance, plot_model_summary, save
 
 
 MLFLOW_EXPERIMENT = "nba-draft-prospect-classification"
-CLASSIFICATION_TARGETS = {"became_starter", "survived_3yrs"}
-TARGET_MODE = "survived_3yrs"
+CLASSIFICATION_TARGETS = {"became_starter", "prospect_tier"}
+TARGET_MODE = "prospect_tier"
+TIER_NAMES = ["Bust", "Fringe", "Solid", "Star"]
 USE_DRAFT_PICK = False
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
 
@@ -112,6 +113,9 @@ def _run_classification(
     mlflow_ctx,
     xgb_cfg=None,
 ):
+    is_multiclass = target_mode == "prospect_tier"
+    tier_labels   = TIER_NAMES if is_multiclass else ["No", "Yes"]
+
     cs = np.logspace(-3, 2, 20)
     linear_cv_folds = 5
 
@@ -135,7 +139,8 @@ def _run_classification(
             pipe = Pipeline([("preprocessor", preprocessor), ("clf", model)])
             pipe.fit(X_train, y_train)
             y_pred = pipe.predict(X_test)
-            y_prob = pipe.predict_proba(X_test)[:, 1]
+            proba  = pipe.predict_proba(X_test)
+            y_prob = proba if is_multiclass else proba[:, 1]
 
             metrics = classification_metrics(y_test, y_pred, y_prob)
             best_c = model.C_[0]
@@ -165,7 +170,8 @@ def _run_classification(
                 "y_pred": y_pred,
                 "y_prob": y_prob,
                 "accuracy": metrics["accuracy"],
-                "auc": metrics["roc_auc"],
+                "auc": metrics["auc"],
+                "f1_macro": metrics.get("f1_macro", 0.0),
                 "C": best_c,
                 "importance_kind": "coef",
                 "estimator_step": "clf",
@@ -174,8 +180,10 @@ def _run_classification(
             print(f"{'='*40}")
             print(f"  {name} (C={best_c:.4f}, penalty={penalty})")
             print(f"  Accuracy = {metrics['accuracy']:.4f}")
-            print(f"  ROC-AUC  = {metrics['roc_auc']:.4f}")
-            print(classification_report(y_test, y_pred, target_names=["No", "Yes"], zero_division=0))
+            if is_multiclass:
+                print(f"  F1-macro = {metrics['f1_macro']:.4f}")
+            print(f"  AUC      = {metrics['auc']:.4f}")
+            print(classification_report(y_test, y_pred, target_names=tier_labels, zero_division=0))
 
     cfg = xgb_cfg or {}
     param_grid = {
@@ -215,6 +223,11 @@ def _run_classification(
                     "use_draft_pick": use_draft_pick,
                 }
             )
+            xgb_extra = (
+                {"objective": "multi:softprob", "num_class": 4, "eval_metric": "mlogloss"}
+                if is_multiclass
+                else {"objective": "binary:logistic", "eval_metric": "logloss"}
+            )
             xgb_base = Pipeline(
                 [
                     ("preprocessor", clone(preprocessor)),
@@ -225,7 +238,7 @@ def _run_classification(
                             n_jobs=xgb_n_jobs,
                             verbosity=0,
                             min_child_weight=5,
-                            eval_metric="logloss",
+                            **xgb_extra,
                         ),
                     ),
                 ]
@@ -234,14 +247,15 @@ def _run_classification(
                 xgb_base,
                 param_grid,
                 cv=cv_folds,
-                scoring="roc_auc",
+                scoring="f1_macro" if is_multiclass else "roc_auc",
                 n_jobs=grid_n_jobs,
                 pre_dispatch=pre_dispatch,
             )
             gs.fit(X_train, y_train)
             best = gs.best_estimator_
             y_pred_xgb = best.predict(X_test)
-            y_prob_xgb = best.predict_proba(X_test)[:, 1]
+            proba_xgb  = best.predict_proba(X_test)
+            y_prob_xgb = proba_xgb if is_multiclass else proba_xgb[:, 1]
             metrics_xgb = classification_metrics(y_test, y_pred_xgb, y_prob_xgb)
 
             log_common_params(
@@ -260,7 +274,8 @@ def _run_classification(
             "y_pred": y_pred_xgb,
             "y_prob": y_prob_xgb,
             "accuracy": metrics_xgb["accuracy"],
-            "auc": metrics_xgb["roc_auc"],
+            "auc": metrics_xgb["auc"],
+            "f1_macro": metrics_xgb.get("f1_macro", 0.0),
             "C": None,
             "best_cv_score": round(float(gs.best_score_), 4),
             "importance_kind": "xgb",
@@ -270,8 +285,10 @@ def _run_classification(
         print(f"{'='*40}")
         print(f"  XGBoost  (best: {gs.best_params_})")
         print(f"  Accuracy = {metrics_xgb['accuracy']:.4f}")
-        print(f"  ROC-AUC  = {metrics_xgb['roc_auc']:.4f}")
-        print(classification_report(y_test, y_pred_xgb, target_names=["No", "Yes"], zero_division=0))
+        if is_multiclass:
+            print(f"  F1-macro = {metrics_xgb['f1_macro']:.4f}")
+        print(f"  AUC      = {metrics_xgb['auc']:.4f}")
+        print(classification_report(y_test, y_pred_xgb, target_names=tier_labels, zero_division=0))
 
         print(f"\n{'='*40}\n  XGBoost Feature Importances (top 10)\n{'='*40}")
         print_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
@@ -289,34 +306,58 @@ def plot_results(results, y_test, col_info, target_mode=TARGET_MODE, plot_dir=AR
 
 
 def _plot_classification(results, y_test, target_mode, plot_dir):
+    is_multiclass  = target_mode == "prospect_tier"
+    display_labels = TIER_NAMES if is_multiclass else ["No", "Yes"]
+
     n = len(results)
-    fig, axes = plt.subplots(2, n, figsize=(5 * n, 9))
+    fig_w = 6 * n if is_multiclass else 5 * n
+    fig, axes = plt.subplots(2, n, figsize=(fig_w, 10 if is_multiclass else 9))
     fig.suptitle(f"NBA {target_mode} Classification from College Stats", fontsize=13, fontweight="bold")
+
+    y_test_arr = np.asarray(y_test)
 
     for col, (name, res) in enumerate(results.items()):
         ConfusionMatrixDisplay.from_predictions(
             y_test,
             res["y_pred"],
-            display_labels=["No", "Yes"],
+            display_labels=display_labels,
             ax=axes[0][col],
         )
         axes[0][col].set_title(f"{name}\nAcc={res['accuracy']:.3f}")
 
-        RocCurveDisplay.from_predictions(y_test, res["y_prob"], ax=axes[1][col], name=name)
-        axes[1][col].set_title(f"ROC  AUC={res['auc']:.3f}")
+        if is_multiclass:
+            ax = axes[1][col]
+            x = np.arange(4)
+            width = 0.35
+            actual_counts  = [int(np.sum(y_test_arr == i)) for i in range(4)]
+            pred_counts    = [int(np.sum(res["y_pred"] == i)) for i in range(4)]
+            ax.bar(x - width / 2, actual_counts, width, label="Actual",    color="#3498db")
+            ax.bar(x + width / 2, pred_counts,   width, label="Predicted", color="#e67e22")
+            ax.set_xticks(x)
+            ax.set_xticklabels(TIER_NAMES)
+            ax.set_ylabel("Count")
+            ax.set_title(
+                f"Tier Distribution\nAUC-OvR={res['auc']:.3f}  F1-macro={res.get('f1_macro', 0):.3f}"
+            )
+            ax.legend()
+        else:
+            RocCurveDisplay.from_predictions(y_test, res["y_prob"], ax=axes[1][col], name=name)
+            axes[1][col].set_title(f"ROC  AUC={res['auc']:.3f}")
 
     plt.tight_layout()
     save_and_log(
         fig,
         "classification_results.png",
-        {name: {"accuracy": res["accuracy"], "roc_auc": res["auc"]} for name, res in results.items()},
+        {name: {"accuracy": res["accuracy"], "auc": res["auc"]} for name, res in results.items()},
         artifact_dir=plot_dir,
     )
 
 
 def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=None, run_name=None, tracking_uri=None):
-    df = load_data() if df is None else df
-    xgb_cfg = ((cfg or {}).get("model", {}).get("classification", {}).get("xgboost") or {})
+    model_cfg     = (cfg or {}).get("model", {}) or {}
+    composite_cfg = model_cfg.get("composite_score") or {}
+    xgb_cfg       = model_cfg.get("classification", {}).get("xgboost") or {}
+    df = load_data(composite_cfg=composite_cfg) if df is None else df
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
         model_type="classification",

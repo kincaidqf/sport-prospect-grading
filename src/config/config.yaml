@@ -3,8 +3,14 @@ defaults:
 
 model:
   type: regression          # regression | classification | text | multimodal
+  composite_score:          # shared by both regression and classification targets
+    w_min: 0.35             # weight for NBA minutes per game z-score
+    w_gp: 0.25              # weight for NBA games played z-score
+    w_plus_minus: 0.40      # weight for NBA plus/minus z-score
+    tier_percentiles: [25, 50, 75]  # percentile cut points for bust/fringe/solid/star (classification only)
+    nan_floor: -3.0         # composite score assigned to players with no NBA data
   regression:
-    target_mode: plus_minus      # plus_minus
+    target_mode: composite_score  # plus_minus | composite_score
     use_draft_pick: false        # include draft pick as a feature (leaks scout judgment)
     alpha_min: 1e-4         # lasso alpha search range
     alpha_max: 1e2
@@ -21,7 +27,7 @@ model:
       grid_n_jobs: 1
       pre_dispatch: 1
   classification:
-    target_mode: survived_3yrs  # became_starter | survived_3yrs
+    target_mode: prospect_tier  # became_starter | prospect_tier
     use_draft_pick: false       # include draft pick as a feature (leaks scout judgment)
     xgboost:
       n_estimators: [100, 200]

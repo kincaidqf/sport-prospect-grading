@@ -41,8 +41,8 @@ from src.utils.plotting import plot_feature_importance, plot_model_summary, save
 
 
 MLFLOW_EXPERIMENT = "nba-draft-prospect-regression"
-REGRESSION_TARGETS = {"plus_minus"}
-TARGET_MODE = "plus_minus"
+REGRESSION_TARGETS = {"plus_minus", "composite_score"}
+TARGET_MODE = "composite_score"
 USE_DRAFT_PICK = False
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
 
@@ -321,8 +321,10 @@ def _plot_regression(results, y_test, target_mode, plot_dir):
 
 
 def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=None, run_name=None, tracking_uri=None):
-    df = load_data() if df is None else df
-    xgb_cfg = ((cfg or {}).get("model", {}).get("regression", {}).get("xgboost") or {})
+    model_cfg     = (cfg or {}).get("model", {}) or {}
+    composite_cfg = model_cfg.get("composite_score") or {}
+    xgb_cfg       = model_cfg.get("regression", {}).get("xgboost") or {}
+    df = load_data(composite_cfg=composite_cfg) if df is None else df
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
         model_type="regression",

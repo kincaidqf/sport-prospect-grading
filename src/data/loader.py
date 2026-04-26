@@ -5,7 +5,6 @@ Loads NCAA and NBA master CSVs, merges them, engineers features, and builds
 sklearn ColumnTransformer preprocessors.
 """
 
-import glob
 import os
 
 import numpy as np
@@ -29,9 +28,10 @@ RANDOM_STATE = 42
 
 # Maps TARGET_MODE strings to DataFrame column names
 TARGET_COL = {
-    "plus_minus":     "PLUS_MINUS",
-    "became_starter": "became_starter",
-    "survived_3yrs":  "survived_3yrs",
+    "plus_minus":      "PLUS_MINUS",
+    "became_starter":  "became_starter",
+    "prospect_tier":   "prospect_tier",
+    "composite_score": "composite_score",
 }
 
 NUMERIC_FEATURES = [
@@ -103,41 +103,54 @@ def assign_conf_tier(team):
     return 0
 
 
-def _seasons_played(nba_master):
-    """Count distinct NBA seasons per player_id from the season cache."""
-    files = glob.glob(os.path.join(CACHE_DIR, "*.csv"))
-    if not files:
-        return pd.Series(dtype=int)
-    all_seasons = pd.concat(
-        [pd.read_csv(f, usecols=["PLAYER_ID", "SEASON_ID"]) for f in files],
-        ignore_index=True,
-    )
-    return (
-        all_seasons.drop_duplicates()
-        .groupby("PLAYER_ID")
-        .size()
-        .rename("seasons_played")
-    )
+def _compute_composite_score(df, w_min=0.30, w_gp=0.15, w_pm=0.55, nan_floor=-3.0):
+    """Weighted z-score composite of NBA MIN, GP, and PLUS_MINUS.
+
+    Players with no NBA data (all three stats NaN) receive nan_floor so they
+    reliably land in the lowest tier after percentile binning.
+    """
+    def _zscore(s):
+        mu, sigma = s.mean(), s.std()
+        return (s - mu) / (sigma if sigma > 0 else 1.0)
+
+    composite = w_min * _zscore(df["MIN"]) + w_gp * _zscore(df["GP"]) + w_pm * _zscore(df["PLUS_MINUS"])
+    return composite.fillna(nan_floor)
+
+
+def _assign_tier(composite, percentiles=(25, 50, 75)):
+    """Bin composite scores into 0=Bust, 1=Fringe, 2=Solid, 3=Star.
+
+    Cut points are derived from the given percentiles of the composite
+    distribution, making it easy to shift tier boundaries via config.
+    """
+    cuts = np.percentile(composite, list(percentiles))
+    return pd.Series(np.digitize(composite.values, cuts), index=composite.index, dtype=int)
 
 
 # ── Data loading ───────────────────────────────────────────────────────────────
 
-def load_data():
+def load_data(composite_cfg=None):
     ncaa = pd.read_csv(NCAA_PATH)
     nba  = pd.read_csv(NBA_PATH)
 
     df = ncaa.merge(
-        nba[["player_name", "draft_year", "PLUS_MINUS", "MIN", "player_id"]],
+        nba[["player_name", "draft_year", "PLUS_MINUS", "MIN", "GP", "player_id"]],
         left_on=["Name", "draft_year"],
         right_on=["player_name", "draft_year"],
         how="inner",
     )
 
-    # Derived targets
-    df["became_starter"] = (df["MIN"] >= 25).astype(int)
+    _cfg             = composite_cfg or {}
+    w_min            = _cfg.get("w_min", 0.35)
+    w_gp             = _cfg.get("w_gp", 0.25)
+    w_pm             = _cfg.get("w_plus_minus", 0.40)
+    tier_percentiles = tuple(_cfg.get("tier_percentiles", (25, 50, 75)))
+    nan_floor        = float(_cfg.get("nan_floor", -3.0))
 
-    seasons = _seasons_played(nba)
-    df["survived_3yrs"] = df["player_id"].map(seasons).fillna(0).ge(3).astype(int)
+    # Derived targets
+    df["became_starter"]  = (df["MIN"] >= 25).astype(int)
+    df["composite_score"] = _compute_composite_score(df, w_min=w_min, w_gp=w_gp, w_pm=w_pm, nan_floor=nan_floor)
+    df["prospect_tier"]   = _assign_tier(df["composite_score"], percentiles=tier_percentiles)
 
     # Feature engineering
     df["height_in"] = df[HEIGHT_FEATURE].apply(parse_height)

@@ -2,7 +2,14 @@
 from __future__ import annotations
 
 import numpy as np
-from sklearn.metrics import accuracy_score, mean_absolute_error, mean_squared_error, r2_score, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+    roc_auc_score,
+)
 
 
 def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
@@ -15,11 +22,23 @@ def regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
 
 
 def classification_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_prob: np.ndarray) -> dict:
-    """Return accuracy and ROC-AUC for a binary classification model."""
-    return {
-        "accuracy": accuracy_score(y_true, y_pred),
-        "roc_auc": roc_auc_score(y_true, y_prob),
-    }
+    """Return accuracy and AUC for binary or multi-class classification.
+
+    For multi-class (y_prob is 2-D with >2 columns): returns macro F1 and
+    macro OvR ROC-AUC under the key 'auc'.  For binary (y_prob is 1-D or
+    2-column): returns standard ROC-AUC under the same 'auc' key so callers
+    never need to branch on the metric name.
+    """
+    y_prob = np.asarray(y_prob)
+    is_multiclass = y_prob.ndim == 2 and y_prob.shape[1] > 2
+
+    out: dict = {"accuracy": float(accuracy_score(y_true, y_pred))}
+    if is_multiclass:
+        out["auc"]      = float(roc_auc_score(y_true, y_prob, multi_class="ovr", average="macro"))
+        out["f1_macro"] = float(f1_score(y_true, y_pred, average="macro", zero_division=0))
+    else:
+        out["auc"] = float(roc_auc_score(y_true, y_prob))
+    return out
 
 
 def ranking_metrics(y_true: np.ndarray, y_pred: np.ndarray, k: int = 10) -> dict:

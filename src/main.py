@@ -92,7 +92,7 @@ def main() -> None:
         import src.models.regression_model as rm
         regression_cfg = cfg["model"].get("regression", {})
         rm.run(
-            target_mode=regression_cfg.get("target_mode", "plus_minus"),
+            target_mode=regression_cfg.get("target_mode", "composite_score"),
             use_draft_pick=regression_cfg.get("use_draft_pick", False),
             cfg=cfg,
             run_name=args.run_name,
@@ -102,7 +102,7 @@ def main() -> None:
         import src.models.classification_model as cm
         classification_cfg = cfg["model"].get("classification", {})
         cm.run(
-            target_mode=classification_cfg.get("target_mode", "survived_3yrs"),
+            target_mode=classification_cfg.get("target_mode", "prospect_tier"),
             use_draft_pick=classification_cfg.get("use_draft_pick", False),
             cfg=cfg,
             run_name=args.run_name,
