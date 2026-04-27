@@ -62,7 +62,7 @@ def normalize(name: str) -> str:
 
 def draft_year_to_seasons(draft_year: int) -> list[str]:
     seasons = []
-    for offset in range(5):
+    for offset in range(3):
         s = draft_year + offset
         seasons.append(f"{s}-{str(s + 1)[-2:]}")
     return seasons

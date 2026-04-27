@@ -76,7 +76,7 @@ POSITION_FEATURE        = "Pos"
 PROSPECT_CONTEXT_FEATURE  = "prospect_context_score"
 TEAM_DIFFICULTY_FEATURE   = "team_difficulty_score"
 MPG_MINUTES_FEATURE       = "mpg_minutes"
-PROSPECT_CONTEXT_MODE     = "individual"  # "composite" | "individual" | "both" | "none"
+PROSPECT_CONTEXT_MODE     = "composite"  # "composite" | "individual" | "both" | "none"
 
 # ── Prospect Context Score config ──────────────────────────────────────────────
 
@@ -142,19 +142,13 @@ def _parse_mpg_to_minutes(val) -> float:
         return np.nan
 
 
-def compute_prospect_context_score(team: str, cl: str, mpg_minutes: float) -> float:
-    """Multiplicative scalar: school difficulty × class standing × minutes fraction.
-
-    Returns np.nan when mpg_minutes is NaN so the pipeline imputer can fill it.
-    """
-    if np.isnan(mpg_minutes):
-        return np.nan
-    difficulty   = _TEAM_DIFFICULTY.get(str(team).strip(), 0.25)
-    class_score  = _CLASS_SCORE.get(str(cl).strip(), np.nan)
+def compute_prospect_context_score(team: str, cl: str) -> float:
+    """Multiplicative scalar: school difficulty × class standing."""
+    difficulty  = _TEAM_DIFFICULTY.get(str(team).strip(), 0.25)
+    class_score = _CLASS_SCORE.get(str(cl).strip(), np.nan)
     if np.isnan(class_score):
         return np.nan
-    minutes_score = min(mpg_minutes / _MPG_CAP, 1.0)
-    return difficulty * (class_score ** 1.5) * minutes_score
+    return difficulty * (class_score ** 1.5)
 
 
 def _compute_composite_score(df, w_min=0.55, w_gp=0.3, w_pm=0.15, nan_floor=-3.0):
@@ -221,10 +215,10 @@ def load_data(composite_cfg=None):
     _mpg_minutes  = _mpg_from_col.fillna(_mpg_fallback)
 
     df[TEAM_DIFFICULTY_FEATURE]  = df["Team"].map(lambda t: _TEAM_DIFFICULTY.get(str(t).strip(), 0.25))
-    df[MPG_MINUTES_FEATURE]      = _mpg_minutes.values
+    df[MPG_MINUTES_FEATURE]      = _mpg_minutes.values  # stored for analysis only; never used in training
     df[PROSPECT_CONTEXT_FEATURE] = [
-        compute_prospect_context_score(team, cl, mpg)
-        for team, cl, mpg in zip(df["Team"], df[CLASS_FEATURE], _mpg_minutes)
+        compute_prospect_context_score(team, cl)
+        for team, cl in zip(df["Team"], df[CLASS_FEATURE])
     ]
 
     g = df["G"].replace(0, np.nan)
@@ -304,8 +298,6 @@ def build_feature_matrix(
         numeric_cols = numeric_cols + [DRAFT_PICK_FEATURE]
     if prospect_context_mode in ("composite", "both"):
         numeric_cols.append(PROSPECT_CONTEXT_FEATURE)
-    if prospect_context_mode in ("individual", "both"):
-        numeric_cols.append(MPG_MINUTES_FEATURE)
     categorical_cols = [POSITION_FEATURE] if use_pos_categorical else []
     # Cl (ordinal class standing) is included only in individual/both modes
     ordinal_cols = [CLASS_FEATURE] if prospect_context_mode in ("individual", "both") else []

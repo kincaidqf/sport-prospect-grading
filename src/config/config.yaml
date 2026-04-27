@@ -27,7 +27,7 @@ model:
       grid_n_jobs: 1
       pre_dispatch: 1
   classification:
-    target_mode: became_starter  # became_starter | prospect_tier
+    target_mode: prospect_tier  # became_starter | prospect_tier
     use_draft_pick: false       # include draft pick as a feature (leaks scout judgment)
     eval_mode: random           # random | chronological | repeated_cv
     class_weight: balanced      # null | balanced

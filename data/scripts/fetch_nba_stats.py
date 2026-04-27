@@ -4,8 +4,8 @@ Fetch NBA stats for all players in players_list.txt.
 Strategy (efficient):
   1. Determine all unique NBA seasons needed across every draft class.
   2. Pull LeagueDashPlayerStats once per season — gives PLUS_MINUS + full box.
-  3. For each player, look up their stats across their 3 eligible seasons and
-     keep the single best season (highest PLUS_MINUS).
+  3. For each player, look up their stats across their first 3 eligible seasons
+     and keep the single best season (highest PLUS_MINUS).
 
 Draft-year-to-season mapping example:
   2009 draft → 2009-10, 2010-11, 2011-12
@@ -73,11 +73,11 @@ def parse_players_list(path: Path) -> list[dict]:
 
 def draft_year_to_seasons(draft_year: int) -> list[str]:
     """
-    Return the 5 NBA season IDs for the first 5 seasons after a draft year.
-    e.g. draft_year=2009 → ["2009-10", "2010-11", "2011-12", "2012-13", "2013-14"]
+    Return the 3 NBA season IDs for the first 3 seasons after a draft year.
+    e.g. draft_year=2009 → ["2009-10", "2010-11", "2011-12"]
     """
     seasons = []
-    for offset in range(5):
+    for offset in range(3):
         start = draft_year + offset
         seasons.append(f"{start}-{str(start + 1)[-2:]}")
     return seasons
