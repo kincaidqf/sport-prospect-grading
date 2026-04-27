@@ -44,7 +44,7 @@ mlartifacts/
 mlflow*.db
 
 # Training outputs
-outputs/
+# outputs/
 
 # Environment
 .env
