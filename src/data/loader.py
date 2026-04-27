@@ -46,42 +46,49 @@ NUMERIC_FEATURES = [
     "G", "shoots_3s",
 ]
 
-DRAFT_PICK_FEATURE = "draft_pick"
-HEIGHT_FEATURE     = "Ht"
-HEIGHT_DEV_FEATURE = "height_dev"
-CLASS_FEATURE      = "Cl"
-CLASS_ORDER        = [["Fr.", "So.", "Jr.", "Sr."]]
-POSITION_FEATURE   = "Pos"
-CONF_FEATURE       = "conf_tier"
+# Raw counting-stat equivalents excluded from classification (per user spec:
+# PTS, FGA, 3PG, REB, AST, BLKS, ST — Ratio and MP are not in the model).
+CLASSIFICATION_EXCLUDED_NUMERIC: frozenset[str] = frozenset({
+    "G"
+})
 
-POWER_5_TEAMS = {
-    # ACC
-    "Duke", "North Carolina", "Syracuse", "Louisville", "Virginia", "Florida St.",
-    "Georgia Tech", "Boston College", "Clemson", "Notre Dame", "Miami (FL)",
-    "Pittsburgh", "Wake Forest", "NC State", "Virginia Tech",
-    # Big Ten
-    "Michigan", "Michigan St.", "Ohio St.", "Indiana", "Illinois", "Iowa",
-    "Minnesota", "Northwestern", "Wisconsin", "Purdue", "Maryland", "Nebraska",
-    "Rutgers", "Penn St.",
-    # Big 12
-    "Kansas", "Texas", "Oklahoma", "Baylor", "Texas Tech", "Oklahoma St.",
-    "Iowa St.", "Kansas St.", "West Virginia", "TCU",
-    # SEC
-    "Kentucky", "Florida", "Alabama", "Arkansas", "Auburn", "Georgia", "LSU",
-    "Ole Miss", "Mississippi", "Mississippi St.", "Missouri", "South Carolina",
-    "Tennessee", "Texas A&M", "Vanderbilt",
-    # Pac-12
-    "Arizona", "Arizona St.", "California", "Colorado", "Oregon", "Oregon St.",
-    "Stanford", "UCLA", "USC", "Utah", "Washington", "Washington St.",
+DRAFT_PICK_FEATURE      = "draft_pick"
+HEIGHT_FEATURE          = "Ht"
+HEIGHT_DEV_FEATURE      = "height_dev"
+CLASS_FEATURE           = "Cl"
+CLASS_ORDER             = [["Fr.", "So.", "Jr.", "Sr."]]
+POSITION_FEATURE        = "Pos"
+
+PROSPECT_CONTEXT_FEATURE  = "prospect_context_score"
+TEAM_DIFFICULTY_FEATURE   = "team_difficulty_score"
+MPG_MINUTES_FEATURE       = "mpg_minutes"
+PROSPECT_CONTEXT_MODE     = "individual"  # "composite" | "individual" | "both" | "none"
+
+# ── Prospect Context Score config ──────────────────────────────────────────────
+
+_TIER_1_TEAMS = {"Duke", "Kentucky", "Kansas", "North Carolina", "UCLA", "Arizona", "Michigan St."}
+_TIER_2_TEAMS = {"Villanova", "Gonzaga", "Virginia", "Texas", "Baylor", "Florida", "Oregon", "Louisville", "Indiana"}
+_TIER_3_TEAMS = {"Arkansas", "Auburn", "Alabama", "Tennessee", "Ohio St.", "Wisconsin", "Illinois",
+                 "Texas Tech", "Houston", "Connecticut", "Marquette", "Creighton", "Xavier"}
+_TIER_4_TEAMS = {"Seton Hall", "Providence", "Butler", "Saint Mary's", "VCU", "San Diego St.",
+                 "Memphis", "Cincinnati", "BYU", "Dayton"}
+_TIER_5_TEAMS = {"Georgia Tech", "Boston College", "Wake Forest", "Nebraska", "Minnesota", "DePaul", "Washington St."}
+
+_TEAM_DIFFICULTY: dict[str, float] = {}
+for _t, _score in [
+    (_TIER_1_TEAMS, 1.00), (_TIER_2_TEAMS, 0.85), (_TIER_3_TEAMS, 0.70),
+    (_TIER_4_TEAMS, 0.55), (_TIER_5_TEAMS, 0.40),
+]:
+    _TEAM_DIFFICULTY.update({team: _score for team in _t})
+
+_CLASS_SCORE: dict[str, float] = {
+    "Fr.": 1.00, "Fr": 1.00,
+    "So.": 0.80, "So": 0.80,
+    "Jr.": 0.60, "Jr": 0.60,
+    "Sr.": 0.40, "Sr": 0.40,
 }
 
-HIGH_MID_MAJOR_TEAMS = {
-    "Georgetown", "St. John's", "Seton Hall", "Villanova", "Connecticut",
-    "Providence", "Marquette", "DePaul", "Creighton", "Butler", "Xavier",
-    "Gonzaga", "Memphis", "Houston", "Cincinnati", "SMU", "Wichita St.",
-    "BYU", "San Diego St.", "Nevada", "UNLV", "Utah St.",
-    "Dayton", "Davidson", "Rhode Island", "VCU", "Saint Mary's",
-}
+_MPG_CAP = 30.0
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -96,12 +103,44 @@ def parse_height(ht_str):
     return np.nan
 
 
-def assign_conf_tier(team):
-    if team in POWER_5_TEAMS:
-        return 2
-    if team in HIGH_MID_MAJOR_TEAMS:
-        return 1
-    return 0
+def _parse_mpg_to_minutes(val) -> float:
+    """Convert a raw MPG cell to float minutes/game.
+
+    The NCAA CSV stores MPG in two formats depending on the data source:
+      - Numeric string of seconds/game (e.g. '2283.6' → 38.1 min)
+      - 'MM:SS' string (e.g. '35:56' → 35.93 min)
+    Returns np.nan when the value is missing or unparseable.
+    """
+    if val is None or (isinstance(val, float) and np.isnan(val)):
+        return np.nan
+    s = str(val).strip()
+    if not s or s == "nan":
+        return np.nan
+    if ":" in s:
+        parts = s.split(":")
+        try:
+            return float(parts[0]) + float(parts[1]) / 60.0
+        except (ValueError, IndexError):
+            return np.nan
+    try:
+        return float(s) / 60.0  # stored as seconds/game
+    except ValueError:
+        return np.nan
+
+
+def compute_prospect_context_score(team: str, cl: str, mpg_minutes: float) -> float:
+    """Multiplicative scalar: school difficulty × class standing × minutes fraction.
+
+    Returns np.nan when mpg_minutes is NaN so the pipeline imputer can fill it.
+    """
+    if np.isnan(mpg_minutes):
+        return np.nan
+    difficulty   = _TEAM_DIFFICULTY.get(str(team).strip(), 0.25)
+    class_score  = _CLASS_SCORE.get(str(cl).strip(), np.nan)
+    if np.isnan(class_score):
+        return np.nan
+    minutes_score = min(mpg_minutes / _MPG_CAP, 1.0)
+    return difficulty * (class_score ** 1.5) * minutes_score
 
 
 def _compute_composite_score(df, w_min=0.55, w_gp=0.3, w_pm=0.15, nan_floor=-3.0):
@@ -160,7 +199,19 @@ def load_data(composite_cfg=None):
 
     pos_avg_ht = df.groupby(POSITION_FEATURE)["height_in"].transform("mean")
     df[HEIGHT_DEV_FEATURE] = (df["height_in"] - pos_avg_ht).abs()
-    df[CONF_FEATURE]     = df["Team"].apply(assign_conf_tier)
+    # Prospect context: parse MPG column, fall back to total seconds (MP) / G / 60
+    _mpg_from_col = df["MPG"].apply(_parse_mpg_to_minutes)
+    _mp_total     = pd.to_numeric(df["MP"], errors="coerce")
+    _g_nonzero    = df["G"].replace(0, np.nan)
+    _mpg_fallback = _mp_total / _g_nonzero / 60.0
+    _mpg_minutes  = _mpg_from_col.fillna(_mpg_fallback)
+
+    df[TEAM_DIFFICULTY_FEATURE]  = df["Team"].map(lambda t: _TEAM_DIFFICULTY.get(str(t).strip(), 0.25))
+    df[MPG_MINUTES_FEATURE]      = _mpg_minutes.values
+    df[PROSPECT_CONTEXT_FEATURE] = [
+        compute_prospect_context_score(team, cl, mpg)
+        for team, cl, mpg in zip(df["Team"], df[CLASS_FEATURE], _mpg_minutes)
+    ]
 
     g = df["G"].replace(0, np.nan)
     df["pts_pg"] = df["PTS"]  / g
@@ -208,12 +259,18 @@ def load_data(composite_cfg=None):
 
 # ── Feature matrix ─────────────────────────────────────────────────────────────
 
-def build_feature_matrix(df, use_draft_pick=False):
-    numeric_cols     = NUMERIC_FEATURES + [HEIGHT_DEV_FEATURE, CONF_FEATURE]
+def build_feature_matrix(df, use_draft_pick=False, exclude_features=None, prospect_context_mode=PROSPECT_CONTEXT_MODE):
+    _exclude     = frozenset(exclude_features or [])
+    numeric_cols = [f for f in NUMERIC_FEATURES + [HEIGHT_DEV_FEATURE, TEAM_DIFFICULTY_FEATURE] if f not in _exclude]
     if use_draft_pick:
         numeric_cols = numeric_cols + [DRAFT_PICK_FEATURE]
+    if prospect_context_mode in ("composite", "both"):
+        numeric_cols.append(PROSPECT_CONTEXT_FEATURE)
+    if prospect_context_mode in ("individual", "both"):
+        numeric_cols.append(MPG_MINUTES_FEATURE)
     categorical_cols = []
-    ordinal_cols     = [CLASS_FEATURE]
+    # Cl (ordinal class standing) is included only in individual/both modes
+    ordinal_cols = [CLASS_FEATURE] if prospect_context_mode in ("individual", "both") else []
 
     transformers = [
         ("num", Pipeline([
@@ -226,11 +283,12 @@ def build_feature_matrix(df, use_draft_pick=False):
             ("imputer", SimpleImputer(strategy="most_frequent")),
             ("onehot",  OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
         ]), categorical_cols))
-    transformers.append(("ord", Pipeline([
-        ("imputer",  SimpleImputer(strategy="most_frequent")),
-        ("ordinal",  OrdinalEncoder(categories=CLASS_ORDER, handle_unknown="use_encoded_value", unknown_value=-1)),
-        ("scaler",   StandardScaler()),
-    ]), ordinal_cols))
+    if ordinal_cols:
+        transformers.append(("ord", Pipeline([
+            ("imputer",  SimpleImputer(strategy="most_frequent")),
+            ("ordinal",  OrdinalEncoder(categories=CLASS_ORDER, handle_unknown="use_encoded_value", unknown_value=-1)),
+            ("scaler",   StandardScaler()),
+        ]), ordinal_cols))
     preprocessor = ColumnTransformer(transformers)
 
     return preprocessor, numeric_cols, categorical_cols, ordinal_cols

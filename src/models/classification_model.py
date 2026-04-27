@@ -17,9 +17,11 @@ from xgboost import XGBClassifier
 
 from src.data.loader import (
     PROJECT_ROOT,
+    PROSPECT_CONTEXT_MODE,
     RANDOM_STATE,
     TARGET_COL,
     TEST_SIZE,
+    CLASSIFICATION_EXCLUDED_NUMERIC,
     build_feature_matrix,
     load_data,
 )
@@ -41,11 +43,11 @@ MLFLOW_EXPERIMENT = "nba-draft-prospect-classification"
 CLASSIFICATION_TARGETS = {"became_starter", "prospect_tier"}
 TARGET_MODE = "prospect_tier"
 TIER_NAMES = ["Bust", "Contributor", "Star"]
-USE_DRAFT_PICK = False
+USE_DRAFT_PICK = True
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
 
 
-def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, mlflow_ctx=None, xgb_cfg=None):
+def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, mlflow_ctx=None, xgb_cfg=None, prospect_context_mode=PROSPECT_CONTEXT_MODE):
     if target_mode not in CLASSIFICATION_TARGETS:
         raise ValueError(
             f"classification_model only supports {sorted(CLASSIFICATION_TARGETS)}; got {target_mode!r}"
@@ -54,6 +56,8 @@ def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PIC
     preprocessor, numeric_cols, categorical_cols, ordinal_cols = build_feature_matrix(
         df,
         use_draft_pick=use_draft_pick,
+        exclude_features=CLASSIFICATION_EXCLUDED_NUMERIC,
+        prospect_context_mode=prospect_context_mode,
     )
     feature_cols = numeric_cols + categorical_cols + ordinal_cols
     col = TARGET_COL[target_mode]
@@ -354,9 +358,10 @@ def _plot_classification(results, y_test, target_mode, plot_dir):
 
 
 def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=None, run_name=None, tracking_uri=None):
-    model_cfg     = (cfg or {}).get("model", {}) or {}
-    composite_cfg = model_cfg.get("composite_score") or {}
-    xgb_cfg       = model_cfg.get("classification", {}).get("xgboost") or {}
+    model_cfg             = (cfg or {}).get("model", {}) or {}
+    composite_cfg         = model_cfg.get("composite_score") or {}
+    xgb_cfg               = model_cfg.get("classification", {}).get("xgboost") or {}
+    prospect_context_mode = model_cfg.get("prospect_context_mode", PROSPECT_CONTEXT_MODE)
     df = load_data(composite_cfg=composite_cfg) if df is None else df
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
@@ -391,6 +396,7 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
             use_draft_pick=use_draft_pick,
             mlflow_ctx=mlflow_ctx,
             xgb_cfg=xgb_cfg,
+            prospect_context_mode=prospect_context_mode,
         )
         log_candidate_summary(results, task="classification")
         plot_results(results, y_test, col_info, target_mode=target_mode, plot_dir=mlflow_ctx.plot_dir)
