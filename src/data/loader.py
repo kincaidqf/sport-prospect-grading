@@ -76,16 +76,16 @@ _TIER_5_TEAMS = {"Georgia Tech", "Boston College", "Wake Forest", "Nebraska", "M
 
 _TEAM_DIFFICULTY: dict[str, float] = {}
 for _t, _score in [
-    (_TIER_1_TEAMS, 1.00), (_TIER_2_TEAMS, 0.85), (_TIER_3_TEAMS, 0.70),
-    (_TIER_4_TEAMS, 0.55), (_TIER_5_TEAMS, 0.40),
+    (_TIER_1_TEAMS, 5.00), (_TIER_2_TEAMS, 4.00), (_TIER_3_TEAMS, 3.00),
+    (_TIER_4_TEAMS, 2.00), (_TIER_5_TEAMS, 1.00),
 ]:
     _TEAM_DIFFICULTY.update({team: _score for team in _t})
 
 _CLASS_SCORE: dict[str, float] = {
     "Fr.": 1.00, "Fr": 1.00,
-    "So.": 0.80, "So": 0.80,
-    "Jr.": 0.60, "Jr": 0.60,
-    "Sr.": 0.40, "Sr": 0.40,
+    "So.": 0.75, "So": 0.75,
+    "Jr.": 0.50, "Jr": 0.50,
+    "Sr.": 0.25, "Sr": 0.25,
 }
 
 _MPG_CAP = 30.0
