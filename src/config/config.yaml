@@ -27,13 +27,26 @@ model:
       grid_n_jobs: 1
       pre_dispatch: 1
   classification:
-    target_mode: prospect_tier  # became_starter | prospect_tier
+    target_mode: became_starter  # became_starter | prospect_tier
     use_draft_pick: false       # include draft pick as a feature (leaks scout judgment)
+    eval_mode: random           # random | chronological | repeated_cv
+    class_weight: balanced      # null | balanced
+    threshold_tuning: false     # true | false — tune per-class prob offsets on val set
+    selection_metric: f1_macro  # metric used to rank candidate models
     xgboost:
+      # Conservative defaults for fast smoke tests; expand values for full grid search.
+      # Full range options: n_estimators [100,300], max_depth [2,3], lr [0.02,0.05,0.1],
+      # subsample [0.7,0.9], colsample_bytree [0.7,1.0], min_child_weight [3,5,10],
+      # reg_alpha [0,0.1,1], reg_lambda [1,5,10], gamma [0,0.5]
       n_estimators: [100, 200]
       max_depth: [2, 3]
       learning_rate: [0.05, 0.1]
-      subsample: [0.8]
+      subsample: [0.7, 0.9]
+      colsample_bytree: [1.0]
+      min_child_weight: [3, 10]
+      reg_alpha: [0, 0.1]
+      reg_lambda: [1, 5]
+      gamma: [0]
       cv_folds: 3
       n_jobs: 1
       grid_n_jobs: 1

@@ -60,6 +60,8 @@ def _ensure_macos_openmp_for_xgboost(model_type: str) -> None:
 
         env = os.environ.copy()
         env["XGBOOST_OPENMP_REEXECED"] = "1"
+        env["PYTHONUNBUFFERED"] = "1"  # prevent SIGSEGV during stdout flush at exit
+        env["OMP_NUM_THREADS"] = "1"   # prevent multi-runtime OpenMP conflict (SAGA + XGBoost)
         env[fallback_var] = os.pathsep.join(
             [libomp_dir, *[path for path in existing_paths if path]]
         )

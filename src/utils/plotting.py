@@ -45,6 +45,7 @@ def plot_feature_importance(results, col_info, target_mode, artifact_dir=DEFAULT
                 numeric_cols,
                 categorical_cols,
                 ordinal_cols,
+                step_name=res.get("estimator_step", "xgb"),
             )
 
     n_models = len(importance_data)
@@ -138,6 +139,8 @@ def plot_model_summary(results, target_mode, task_type, artifact_dir=DEFAULT_ART
         row = {"Model": name}
         if task_type == "classification":
             row["Accuracy"] = res["accuracy"]
+            row["F1-macro"] = res.get("f1_macro", float("nan"))
+            row["Bal.Acc"] = res.get("balanced_accuracy", float("nan"))
             row["ROC-AUC"] = res["auc"]
             row["C / alpha"] = f"{res.get('C', res.get('alpha', ''))}"
         else:

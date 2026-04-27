@@ -264,13 +264,22 @@ def log_data_summary(
     log_common_params(params)
 
 
-def log_candidate_summary(results: dict[str, Any], task: str) -> None:
+def log_candidate_summary(
+    results: dict[str, Any],
+    task: str,
+    target_mode: str | None = None,
+) -> None:
     """Log best-model params and a JSON candidate-summary artifact to the active run."""
     import json
     import os
     import tempfile
 
-    selection_metric = "r2" if task == "regression" else "auc"
+    if task == "regression":
+        selection_metric = "r2"
+    elif target_mode == "prospect_tier":
+        selection_metric = "f1_macro"
+    else:
+        selection_metric = "auc"
 
     summary: dict[str, Any] = {}
     for name, res in results.items():
@@ -284,7 +293,12 @@ def log_candidate_summary(results: dict[str, Any], task: str) -> None:
             entry = {
                 "test_accuracy": res["accuracy"],
                 "test_roc_auc": res["auc"],
+                "test_f1_macro": res.get("f1_macro", 0.0),
+                "test_balanced_accuracy": res.get("balanced_accuracy", 0.0),
             }
+            if res.get("cv_mean_f1_macro") is not None:
+                entry["cv_mean_f1_macro"] = res["cv_mean_f1_macro"]
+                entry["cv_std_f1_macro"] = res.get("cv_std_f1_macro", 0.0)
         if res.get("best_cv_score") is not None:
             entry["best_cv_score"] = res["best_cv_score"]
         summary[name] = entry
@@ -293,6 +307,7 @@ def log_candidate_summary(results: dict[str, Any], task: str) -> None:
     log_common_params(
         {
             "best_model": best_name,
+            "selection_metric": selection_metric,
             f"best_{selection_metric}": results[best_name].get(selection_metric),
         }
     )

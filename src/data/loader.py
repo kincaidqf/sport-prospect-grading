@@ -46,6 +46,20 @@ NUMERIC_FEATURES = [
     "G", "shoots_3s",
 ]
 
+# Additional engineered features available for classification only.
+CLASSIFICATION_ENGINEERED_NUMERIC: list[str] = [
+    "to_pg",        # turnovers per game
+    "oreb_pg",      # offensive rebounds per game
+    "dreb_pg",      # defensive rebounds per game
+    "fg3a_pg",      # three-point attempts per game
+    "ast_to",       # assist-to-turnover ratio
+    "stocks_pg",    # steals + blocks per game
+    "usage_proxy",  # (FGA + 0.44*FTA + TO) / G
+    "efg_pct",      # effective field goal %
+    "ts_pct",       # true shooting %
+    "height_in",    # height in inches
+]
+
 # Raw counting-stat equivalents excluded from classification (per user spec:
 # PTS, FGA, 3PG, REB, AST, BLKS, ST — Ratio and MP are not in the model).
 CLASSIFICATION_EXCLUDED_NUMERIC: frozenset[str] = frozenset({
@@ -243,15 +257,30 @@ def load_data(composite_cfg=None):
     df["fg3_share"]   = df["3FG"].fillna(0) / df["FGM"].replace(0, np.nan)
     df["shoots_3s"]   = (df["3FG"].fillna(0) > 0).astype(float)
 
+    # ── Engineered features (classification-specific) ──────────────────────────
+    _to = pd.to_numeric(df["TO"], errors="coerce")
+    df["to_pg"]       = _to / g
+    df["oreb_pg"]     = pd.to_numeric(df["ORebs"], errors="coerce") / g
+    df["dreb_pg"]     = pd.to_numeric(df["DRebs"], errors="coerce") / g
+    df["fg3a_pg"]     = pd.to_numeric(df["3FGA"], errors="coerce") / g
+    df["ast_to"]      = df["AST"] / _to.replace(0, np.nan)
+    df["stocks_pg"]   = (df["ST"].fillna(0) + df["BLKS"].fillna(0)) / g
+    df["usage_proxy"] = (df["FGA"].fillna(0) + 0.44 * df["FTA"].fillna(0) + _to.fillna(0)) / g
+    _fga_safe         = df["FGA"].replace(0, np.nan)
+    df["efg_pct"]     = (df["FGM"].fillna(0) + 0.5 * df["3FG"].fillna(0)) / _fga_safe
+    _denom_ts         = 2.0 * (df["FGA"].fillna(0) + 0.44 * df["FTA"].fillna(0))
+    df["ts_pct"]      = df["PTS"] / _denom_ts.replace(0, np.nan)
+
+    all_feature_cols = NUMERIC_FEATURES + CLASSIFICATION_ENGINEERED_NUMERIC
     print(f"\n{'='*50}")
     print(f"  Data Quality Report  ({len(df)} players)")
     print(f"{'='*50}")
-    for col in NUMERIC_FEATURES:
+    for col in all_feature_cols:
         n_null = df[col].isna().sum()
-        print(f"  {col:<14}: {n_null:4d} null ({100*n_null/len(df):5.1f}%)")
-    total_null = df[NUMERIC_FEATURES].isna().sum(axis=1)
+        print(f"  {col:<16}: {n_null:4d} null ({100*n_null/len(df):5.1f}%)")
+    total_null = df[all_feature_cols].isna().sum(axis=1)
     print(f"\n  Players with 0 missing features: {(total_null == 0).sum()}")
-    print(f"  Players with >50% missing:       {(total_null > len(NUMERIC_FEATURES)//2).sum()}")
+    print(f"  Players with >50% missing:       {(total_null > len(all_feature_cols)//2).sum()}")
     print(f"{'='*50}\n")
 
     return df
@@ -259,16 +288,25 @@ def load_data(composite_cfg=None):
 
 # ── Feature matrix ─────────────────────────────────────────────────────────────
 
-def build_feature_matrix(df, use_draft_pick=False, exclude_features=None, prospect_context_mode=PROSPECT_CONTEXT_MODE):
+def build_feature_matrix(
+    df,
+    use_draft_pick: bool = False,
+    exclude_features=None,
+    prospect_context_mode: str = PROSPECT_CONTEXT_MODE,
+    use_engineered_features: bool = False,
+    use_pos_categorical: bool = False,
+):
     _exclude     = frozenset(exclude_features or [])
     numeric_cols = [f for f in NUMERIC_FEATURES + [HEIGHT_DEV_FEATURE, TEAM_DIFFICULTY_FEATURE] if f not in _exclude]
+    if use_engineered_features:
+        numeric_cols += [f for f in CLASSIFICATION_ENGINEERED_NUMERIC if f not in _exclude]
     if use_draft_pick:
         numeric_cols = numeric_cols + [DRAFT_PICK_FEATURE]
     if prospect_context_mode in ("composite", "both"):
         numeric_cols.append(PROSPECT_CONTEXT_FEATURE)
     if prospect_context_mode in ("individual", "both"):
         numeric_cols.append(MPG_MINUTES_FEATURE)
-    categorical_cols = []
+    categorical_cols = [POSITION_FEATURE] if use_pos_categorical else []
     # Cl (ordinal class standing) is included only in individual/both modes
     ordinal_cols = [CLASS_FEATURE] if prospect_context_mode in ("individual", "both") else []
 

@@ -54,27 +54,31 @@ def print_lasso_coefficients(pipe, numeric_cols, categorical_cols, ordinal_cols)
         print(f"  {sign} {row['feature']:<20}  coef = {row['coefficient']:+.4f}")
 
 
-def get_xgb_importance_df(pipe, numeric_cols, categorical_cols, ordinal_cols):
-    """Return fitted XGBoost feature importances."""
-    xgb = pipe.named_steps["xgb"]
+def get_xgb_importance_df(pipe, numeric_cols, categorical_cols, ordinal_cols, step_name="xgb"):
+    """Return feature importances for a tree-based pipeline step.
+
+    step_name should match the Pipeline step containing the fitted tree estimator
+    (e.g. 'xgb' for XGBoost, 'etc' for ExtraTrees).
+    """
+    model = pipe.named_steps[step_name]
     all_names = get_all_feature_names(pipe, numeric_cols, categorical_cols, ordinal_cols)
-    return pd.DataFrame({"feature": all_names, "importance": xgb.feature_importances_}).sort_values(
+    return pd.DataFrame({"feature": all_names, "importance": model.feature_importances_}).sort_values(
         "importance",
         ascending=False,
     )
 
 
-def log_xgb_importances(pipe, numeric_cols, categorical_cols, ordinal_cols, top_n=15):
-    """Log top XGBoost feature importances to MLflow."""
-    importance_df = get_xgb_importance_df(pipe, numeric_cols, categorical_cols, ordinal_cols)
+def log_xgb_importances(pipe, numeric_cols, categorical_cols, ordinal_cols, top_n=15, step_name="xgb"):
+    """Log top tree model feature importances to MLflow."""
+    importance_df = get_xgb_importance_df(pipe, numeric_cols, categorical_cols, ordinal_cols, step_name=step_name)
     for _, row in importance_df.head(top_n).iterrows():
         safe = row["feature"].replace(" ", "_").replace("%", "pct").replace("-", "_")
         mlflow.log_metric(f"imp_{safe}", row["importance"])
 
 
-def print_xgb_importances(pipe, numeric_cols, categorical_cols, ordinal_cols, top_n=10):
-    """Print the top XGBoost importances."""
-    importance_df = get_xgb_importance_df(pipe, numeric_cols, categorical_cols, ordinal_cols)
+def print_xgb_importances(pipe, numeric_cols, categorical_cols, ordinal_cols, top_n=10, step_name="xgb"):
+    """Print the top tree model importances."""
+    importance_df = get_xgb_importance_df(pipe, numeric_cols, categorical_cols, ordinal_cols, step_name=step_name)
     for _, row in importance_df.head(top_n).iterrows():
         bar = "#" * int(row["importance"] * 50)
         print(f"  {row['feature']:<20}  {row['importance']:.4f}  {bar}")
