@@ -15,9 +15,18 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import yaml
+
 # Ensure project root is on sys.path when run directly
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
+
+CONFIG_PATH = PROJECT_ROOT / "src" / "config" / "config.yaml"
+
+
+def _load_config() -> dict:
+    with open(CONFIG_PATH) as f:
+        return yaml.safe_load(f) or {}
 
 import numpy as np
 import pandas as pd
@@ -55,9 +64,14 @@ def main() -> int:
 
     print("\n=== Classification Contract Checks ===\n")
 
+    cfg          = _load_config()
+    composite_cfg = (cfg.get("model") or {}).get("composite_score") or {}
+    tier_pct     = tuple(composite_cfg.get("tier_percentiles", (50, 80)))
+    print(f"[config] tier_percentiles = {tier_pct}")
+
     # ── Load data ──────────────────────────────────────────────────────────────
     print("Loading data...")
-    df = load_data()
+    df = load_data(composite_cfg=composite_cfg)
     print(f"  Loaded {len(df)} rows\n")
 
     # 1. No leakage columns

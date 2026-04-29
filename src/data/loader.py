@@ -20,6 +20,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 NCAA_PATH    = os.path.join(PROJECT_ROOT, "data", "ncaa", "ncaa_master.csv")
 NBA_PATH     = os.path.join(PROJECT_ROOT, "data", "nba", "nba_master.csv")
 CACHE_DIR    = os.path.join(PROJECT_ROOT, "data", "nba", "season_cache")
+CONFIG_PATH  = os.path.join(PROJECT_ROOT, "src", "config", "config.yaml")
 
 # ── Feature config ─────────────────────────────────────────────────────────────
 
@@ -227,8 +228,18 @@ def _compute_composite_score(df, w_min=0.55, w_gp=0.3, w_pm=0.15, nan_floor=-3.0
     return composite.fillna(nan_floor)
 
 
-def _assign_tier(composite, percentiles=(40, 80)):
-    """Bin composite scores into 0=Bust, 1=Contributor, 2=Star (40/40/20 split).
+def _load_project_config() -> dict:
+    """Load src/config/config.yaml. Returns empty dict if the file is missing."""
+    try:
+        import yaml
+        with open(CONFIG_PATH) as f:
+            return yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return {}
+
+
+def _assign_tier(composite, percentiles=(50, 80)):
+    """Bin composite scores into 0=Bust, 1=Contributor, 2=Star.
 
     Cut points are derived from the given percentiles of the composite
     distribution, making it easy to shift tier boundaries via config.
@@ -250,11 +261,14 @@ def load_data(composite_cfg=None):
         how="inner",
     )
 
-    _cfg             = composite_cfg or {}
-    w_min            = _cfg.get("w_min", 0.35)
-    w_gp             = _cfg.get("w_gp", 0.25)
-    w_pm             = _cfg.get("w_plus_minus", 0.40)
-    tier_percentiles = tuple(_cfg.get("tier_percentiles", (40, 80)))
+    # Config is the source of truth. Auto-load when caller passes nothing or empty dict.
+    if not composite_cfg:
+        composite_cfg = (_load_project_config().get("model") or {}).get("composite_score") or {}
+    _cfg             = composite_cfg
+    w_min            = _cfg.get("w_min", 0.55)
+    w_gp             = _cfg.get("w_gp", 0.30)
+    w_pm             = _cfg.get("w_plus_minus", 0.15)
+    tier_percentiles = tuple(_cfg.get("tier_percentiles", (50, 80)))
     nan_floor        = float(_cfg.get("nan_floor", -3.0))
 
     # Derived targets
