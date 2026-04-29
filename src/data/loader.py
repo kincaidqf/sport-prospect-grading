@@ -95,6 +95,68 @@ for _t, _score in [
 ]:
     _TEAM_DIFFICULTY.update({team: _score for team in _t})
 
+# ESPN box-score data uses full mascot names; map them to the canonical short
+# names used in the tier sets above so both forms resolve to the same score.
+_TEAM_ALIASES: dict[str, str] = {
+    # Tier 1
+    "Duke Blue Devils":           "Duke",
+    "Kentucky Wildcats":          "Kentucky",
+    "Kansas Jayhawks":            "Kansas",
+    "North Carolina Tar Heels":   "North Carolina",
+    "UCLA Bruins":                "UCLA",
+    "Arizona Wildcats":           "Arizona",
+    "Michigan State Spartans":    "Michigan St.",
+    # Tier 2
+    "Villanova Wildcats":         "Villanova",
+    "Gonzaga Bulldogs":           "Gonzaga",
+    "Virginia Cavaliers":         "Virginia",
+    "Texas Longhorns":            "Texas",
+    "Baylor Bears":               "Baylor",
+    "Florida Gators":             "Florida",
+    "Oregon Ducks":               "Oregon",
+    "Louisville Cardinals":       "Louisville",
+    "Indiana Hoosiers":           "Indiana",
+    # Tier 3
+    "Arkansas Razorbacks":        "Arkansas",
+    "Auburn Tigers":              "Auburn",
+    "Alabama Crimson Tide":       "Alabama",
+    "Tennessee Volunteers":       "Tennessee",
+    "Ohio State Buckeyes":        "Ohio St.",
+    "Wisconsin Badgers":          "Wisconsin",
+    "Illinois Fighting Illini":   "Illinois",
+    "Texas Tech Red Raiders":     "Texas Tech",
+    "Houston Cougars":            "Houston",
+    "UConn Huskies":              "Connecticut",
+    "Marquette Golden Eagles":    "Marquette",
+    "Creighton Bluejays":         "Creighton",
+    "Xavier Musketeers":          "Xavier",
+    # Tier 4
+    "Seton Hall Pirates":         "Seton Hall",
+    "Providence Friars":          "Providence",
+    "Butler Bulldogs":            "Butler",
+    "Saint Mary's Gaels":         "Saint Mary's",
+    "VCU Rams":                   "VCU",
+    "San Diego State Aztecs":     "San Diego St.",
+    "Memphis Tigers":             "Memphis",
+    "Cincinnati Bearcats":        "Cincinnati",
+    "BYU Cougars":                "BYU",
+    "Dayton Flyers":              "Dayton",
+    # Tier 5
+    "Georgia Tech Yellow Jackets": "Georgia Tech",
+    "Boston College Eagles":       "Boston College",
+    "Wake Forest Demon Deacons":   "Wake Forest",
+    "Nebraska Cornhuskers":        "Nebraska",
+    "Minnesota Golden Gophers":    "Minnesota",
+    "DePaul Blue Demons":          "DePaul",
+    "Washington State Cougars":    "Washington St.",
+}
+
+
+def _team_difficulty(team: str) -> float:
+    t = str(team).strip()
+    canonical = _TEAM_ALIASES.get(t, t)
+    return _TEAM_DIFFICULTY.get(canonical, 0.25)
+
 _CLASS_SCORE: dict[str, float] = {
     "Fr.": 1.00, "Fr": 1.00,
     "So.": 0.75, "So": 0.75,
@@ -144,7 +206,7 @@ def _parse_mpg_to_minutes(val) -> float:
 
 def compute_prospect_context_score(team: str, cl: str) -> float:
     """Multiplicative scalar: school difficulty × class standing."""
-    difficulty  = _TEAM_DIFFICULTY.get(str(team).strip(), 0.25)
+    difficulty  = _team_difficulty(team)
     class_score = _CLASS_SCORE.get(str(cl).strip(), np.nan)
     if np.isnan(class_score):
         return np.nan
@@ -214,7 +276,7 @@ def load_data(composite_cfg=None):
     _mpg_fallback = _mp_total / _g_nonzero / 60.0
     _mpg_minutes  = _mpg_from_col.fillna(_mpg_fallback)
 
-    df[TEAM_DIFFICULTY_FEATURE]  = df["Team"].map(lambda t: _TEAM_DIFFICULTY.get(str(t).strip(), 0.25))
+    df[TEAM_DIFFICULTY_FEATURE]  = df["Team"].map(_team_difficulty)
     df[MPG_MINUTES_FEATURE]      = _mpg_minutes.values  # stored for analysis only; never used in training
     df[PROSPECT_CONTEXT_FEATURE] = [
         compute_prospect_context_score(team, cl)
