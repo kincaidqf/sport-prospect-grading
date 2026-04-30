@@ -3,6 +3,18 @@ defaults:
 
 model:
   type: regression          # regression | classification | text | multimodal
+  nba_role_score:
+    target_score_mode: global       # global | position_relative
+    tier_thresholds: [-0.5, 0.5, 1.5]
+    nan_floor: -3.0
+    winsor_clip: 2.5                # clip each per-stat z-score at ±this value before combining
+    weights:                        # relative weights for the weighted z-score composite
+      MIN: 0.30                     # floor time = role size by definition
+      nba_pts: 0.25                 # primary offensive role signal
+      nba_reb: 0.20                 # role signal; less position-skewed than BLK
+      nba_ast: 0.15                 # role signal, especially for guards
+      nba_stl: 0.05                 # low variance, _noisy, position-influenced
+      nba_blk: 0.05                 # low variance, strongly center-skewed
   composite_score:          # shared by both regression and classification targets
     w_min: 0.55            # weight for NBA minutes per game z-score
     w_gp: 0.30             # weight for NBA games played z-score
@@ -10,7 +22,7 @@ model:
     tier_percentiles: [50, 80]  # percentile cut points for bust/contributor/star (40/40/20 split)
     nan_floor: -3.0        # composite score assigned to players with no NBA data
   regression:
-    target_mode: composite_score  # plus_minus | composite_score
+    target_mode: nba_role_zscore  # plus_minus | composite_score | nba_role_zscore
     use_draft_pick: false        # include draft pick as a feature (leaks scout judgment)
     alpha_min: 1e-4         # lasso alpha search range
     alpha_max: 1e2

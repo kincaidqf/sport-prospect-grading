@@ -394,12 +394,16 @@ TARGET_COL = {
 
 ---
 
-## Phase 4: Config Changes
+## Phase 4: Config Changes — COMPLETE
 
-**File**: `src/config/config.yaml`
+### File changed
 
-Add a new `nba_role_score` section under `model:`. Keep the old `composite_score` section to avoid
-breaking any existing runs that reference it.
+`src/config/config.yaml`
+
+### What was added
+
+New `nba_role_score` block inserted directly under `model:`, before the existing `composite_score`
+block. Weight keys use the `nba_` prefixed column names established in Phase 3a.
 
 ```yaml
 model:
@@ -410,80 +414,154 @@ model:
     winsor_clip: 2.5                # clip each per-stat z-score at ±this value before combining
     weights:                        # relative weights for the weighted z-score composite
       MIN: 0.30                     # floor time = role size by definition
-      PTS: 0.25                     # primary offensive role signal
-      REB: 0.20                     # role signal; less position-skewed than BLK
-      AST: 0.15                     # role signal, especially for guards
-      STL: 0.05                     # low variance, noisy, position-influenced
-      BLK: 0.05                     # low variance, strongly center-skewed
+      nba_pts: 0.25                 # primary offensive role signal
+      nba_reb: 0.20                 # role signal; less position-skewed than BLK
+      nba_ast: 0.15                 # role signal, especially for guards
+      nba_stl: 0.05                 # low variance, noisy, position-influenced
+      nba_blk: 0.05                 # low variance, strongly center-skewed
 ```
 
-To run equal-weight comparison, set all weights to 0.167 (or any equal value — they are
-normalized to sum to 1 before use). MLflow logs the full config on every run, so any weight
-experiment is automatically tracked.
+The existing `composite_score` block is untouched. No model files need changes to switch
+`target_score_mode` — only this config value changes. MLflow logs the full config on every run
+via `log_config_dict(cfg)`, making global vs. position_relative comparisons trivial.
 
-**How the toggle works**:
-- `target_score_mode: global` → z-scores computed across all players regardless of position
-- `target_score_mode: position_relative` → z-scores computed within Guard / Forward / Center groups
+To run an equal-weight experiment, set all weights to the same value (e.g. 0.167); the
+composite normalises by the sum of weights so relative values are what matter.
 
-`load_data()` reads `nba_role_score` from config (the same auto-load pattern already used for
-`composite_score`). No model file changes are needed to switch modes — only the config value changes.
+### Verification results
 
-The mode is logged to MLflow via `log_config_dict(cfg)` which already runs at the top of each
-model's `run()` function, making it trivially easy to compare runs in the MLflow UI.
-
----
-
-## Phase 5: Comparing global vs. position_relative
-
-No new code is needed for the comparison. The workflow is:
-
-1. Set `target_score_mode: global` in config → run `regression_model.py` → MLflow run A
-2. Set `target_score_mode: position_relative` → run again → MLflow run B
-3. In MLflow UI, compare R², RMSE, MAE (regression) or F1-macro, balanced accuracy (classification)
-
-Because `log_config_dict(cfg)` logs the full config on every run, filtering by
-`target_score_mode` in the MLflow UI gives a clean apples-to-apples comparison.
+| Check | Result |
+|---|---|
+| Config block parsed by `_load_project_config()` | ✓ |
+| `target_score_mode` read | `global` |
+| `weights` dict read | `{MIN: 0.30, nba_pts: 0.25, nba_reb: 0.20, nba_ast: 0.15, nba_stl: 0.05, nba_blk: 0.05}` |
+| `nba_role_zscore` mean (post re-standardise) | 0.0 |
+| `nba_role_zscore` std (post re-standardise) | 1.0 |
+| `prospect_tier` distribution | 0=275, 1=264, 2=183, 3=65 (unchanged from Phase 3) |
+| `composite_score` config still loads | ✓ (untouched) |
 
 ---
 
-## Phase 6: regression_model.py Updates
+## Phase 5: Comparing global vs. position_relative — COMPLETE (no code required)
 
-**File**: `src/models/regression_model.py`
+No new code was needed. The comparison workflow is:
 
-Minimal changes to preserve existing structure (Lasso / Ridge / XGBoost suite, GridSearchCV,
-MLflow logging, `plot_results`):
+1. Set `target_score_mode: global` in `src/config/config.yaml` → run a model script → MLflow run A
+2. Change to `target_score_mode: position_relative` → run again → MLflow run B
+3. In MLflow UI filter by `target_score_mode` param to compare R², RMSE, MAE (regression) or
+   F1-macro, balanced accuracy (classification) across the two modes
 
-1. Add `"nba_role_zscore"` to `REGRESSION_TARGETS`.
-2. Update `TARGET_MODE = "nba_role_zscore"` as the new default.
-3. In `_plot_regression()`, add a 3rd subplot row showing the bucket distribution comparison:
-   - Apply `_assign_tier_thresholded()` to `y_test` (actual z-scores) and `y_pred` (predicted)
-   - Bar chart: actual tier counts vs. predicted tier counts (same style as in classification)
-   - This lets you visually inspect whether the regression model is calibrated across tiers
-   - Label the 4 tiers: Bust / Bench / Starter / Star
-4. Log `target_score_mode` as an explicit MLflow param (extract from `cfg`).
+`log_config_dict(cfg)` already logs the full config on every run (including `target_score_mode`),
+and Phase 6 adds an explicit `mlflow.log_param("target_score_mode", ...)` call so the param is
+also queryable directly in the MLflow param column without parsing the config artifact.
+
+---
+
+## Phase 6: regression_model.py Updates — COMPLETE
+
+### File changed
+
+`src/models/regression_model.py`
+
+### What was changed
+
+**1. Added import** of `_assign_tier_thresholded` from `src.data.loader` and `pandas` (needed for
+`pd.Series` when wrapping `y_pred` for tier assignment).
+
+**2. Updated module-level constants**:
+```python
+REGRESSION_TARGETS = {"plus_minus", "composite_score", "nba_role_zscore"}
+TARGET_MODE = "nba_role_zscore"
+```
+
+**3. Added tier distribution subplot row in `_plot_regression()`**:
+
+A module-level `_TIER_LABELS = ["Bust", "Bench", "Starter", "Star"]` constant was added.
+The function now detects `show_tiers = target_mode == "nba_role_zscore"` and conditionally
+renders a 3rd row of subplots (one per model) with side-by-side bar charts of actual vs.
+predicted tier counts. For non-`nba_role_zscore` targets the layout is unchanged (2 rows).
+
+```python
+show_tiers = target_mode == "nba_role_zscore"
+n_rows = 3 if show_tiers else 2
+fig, axes = plt.subplots(n_rows, n, figsize=(6 * n, 5 * n_rows))
+...
+if show_tiers:
+    pred_series = pd.Series(y_pred, index=y_test.index)
+    pred_tiers = _assign_tier_thresholded(pred_series).value_counts().sort_index()
+    ax3.bar(x - w/2, [actual_tiers.get(i, 0) for i in range(4)], width=w, label="Actual", color="steelblue")
+    ax3.bar(x + w/2, [pred_tiers.get(i, 0) for i in range(4)], width=w, label="Predicted", color="darkorange")
+    ax3.set_xticklabels(_TIER_LABELS)
+```
+
+**4. Logged `target_score_mode` as an explicit MLflow param** in `run()`:
+
+```python
+target_score_mode = (model_cfg.get("nba_role_score") or {}).get("target_score_mode", "global")
+...
+log_common_params({
+    ...
+    "target_score_mode": target_score_mode,
+})
+```
 
 No changes to Lasso, Ridge, or XGBoost architectures, hyperparameter grids, or CV setup.
 
+### Verification
+
+Syntax verified via `ast.parse`. XGBoost import fails at runtime due to a pre-existing missing
+`libomp.dylib` system dependency (unrelated to these changes; was already broken before Phase 6).
+
 ---
 
-## Phase 7: classification_model.py Updates
+## Phase 7: classification_model.py Updates — COMPLETE
 
-**File**: `src/models/classification_model.py`
+### File changed
 
-The `prospect_tier` target now carries 4 classes (0–3) instead of 3. Changes required:
+`src/models/classification_model.py`
 
-1. Update tier labels:
-   ```python
-   TIER_NAMES       = ["Bust", "Bench", "Starter", "Star"]
-   TIER_CLASS_NAMES = ["bust", "bench", "starter", "star"]
-   ```
-2. Update XGBoost multiclass config: `"num_class": len(TIER_NAMES)` (evaluates to 4).
-   This is already parameterized via `len(TIER_NAMES)` — no hardcoded value to change.
-3. Update `CLASSIFICATION_TARGETS` to also accept `"nba_role_tier"` as an alias if desired,
-   or keep as `"prospect_tier"` (simpler — the tier column just has 4 values now).
-4. Log `target_score_mode` as an explicit MLflow param (extract from `cfg`).
-5. The confusion matrix, bar chart, precision/recall-per-class print loop, and
-   `_tune_thresholds` all iterate over `TIER_NAMES` dynamically — no further changes needed.
+### What was changed
+
+**1. Updated tier label constants**:
+```python
+TIER_NAMES       = ["Bust", "Bench", "Starter", "Star"]
+TIER_CLASS_NAMES = ["bust", "bench", "starter", "star"]
+```
+
+**2. XGBoost `num_class`** — already parameterized as `len(TIER_NAMES)`, evaluates to 4
+automatically. No change required.
+
+**3. `CLASSIFICATION_TARGETS`** — kept as `{"became_starter", "prospect_tier"}`. The tier
+column now carries 4 values (0–3); no alias needed.
+
+**4. Logged `target_score_mode` as an explicit MLflow param** in `run()`:
+```python
+target_score_mode = (model_cfg.get("nba_role_score") or {}).get("target_score_mode", "global")
+...
+log_common_params({
+    ...
+    "target_score_mode": target_score_mode,
+})
+```
+
+**5. No further changes required**: the confusion matrix, tier-distribution bar chart,
+precision/recall print loop (`for cls in TIER_CLASS_NAMES`), and `_tune_thresholds` all
+iterate over `TIER_NAMES` / `TIER_CLASS_NAMES` dynamically. `classification_metrics` keys
+per-class metrics by `class_names`, so `precision_bench`, `recall_bench`, `precision_starter`,
+`recall_starter` are emitted automatically. `classification_report` uses `target_names=tier_labels`
+which also resolves dynamically.
+
+### Verification
+
+Syntax verified via `ast.parse`. All 4-class-sensitive expressions confirmed dynamic:
+
+| Expression | Evaluates to |
+|---|---|
+| `"num_class": len(TIER_NAMES)` | 4 |
+| `x = np.arange(len(TIER_NAMES))` | `[0,1,2,3]` |
+| `for i in range(len(TIER_NAMES))` | 0–3 |
+| `for cls in TIER_CLASS_NAMES` | bust, bench, starter, star |
+| `display_labels = TIER_NAMES` | ["Bust","Bench","Starter","Star"] |
 
 ---
 

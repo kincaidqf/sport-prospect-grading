@@ -45,8 +45,8 @@ from src.utils.plotting import plot_feature_importance, plot_model_summary, save
 MLFLOW_EXPERIMENT = "nba-draft-prospect-classification"
 CLASSIFICATION_TARGETS = {"became_starter", "prospect_tier"}
 TARGET_MODE = "prospect_tier"
-TIER_NAMES = ["Bust", "Contributor", "Star"]
-TIER_CLASS_NAMES = ["bust", "contributor", "star"]
+TIER_NAMES = ["Bust", "Bench", "Starter", "Star"]
+TIER_CLASS_NAMES = ["bust", "bench", "starter", "star"]
 USE_DRAFT_PICK = False  # never include draft_pick by default — it leaks scout judgment
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
 
@@ -576,6 +576,7 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
     clf_cfg               = model_cfg.get("classification", {}) or {}
     xgb_cfg               = clf_cfg.get("xgboost") or {}
     prospect_context_mode = model_cfg.get("prospect_context_mode", PROSPECT_CONTEXT_MODE)
+    target_score_mode     = (model_cfg.get("nba_role_score") or {}).get("target_score_mode", "global")
     df = load_data(composite_cfg=composite_cfg) if df is None else df
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
@@ -591,6 +592,7 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
         log_common_params({
             "model_family": "classification",
             "target": target_mode,
+            "target_score_mode": target_score_mode,
             "use_draft_pick": use_draft_pick,
             "eval_mode": clf_cfg.get("eval_mode", "random"),
             "class_weight": str(clf_cfg.get("class_weight")),

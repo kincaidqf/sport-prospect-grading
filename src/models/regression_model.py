@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import mlflow
 import mlflow.sklearn
 import numpy as np
+import pandas as pd
 from sklearn.base import clone
 from sklearn.linear_model import LassoCV, RidgeCV
 from sklearn.model_selection import GridSearchCV, train_test_split
@@ -18,6 +19,7 @@ from src.data.loader import (
     RANDOM_STATE,
     TARGET_COL,
     TEST_SIZE,
+    _assign_tier_thresholded,
     build_feature_matrix,
     load_data,
 )
@@ -41,8 +43,8 @@ from src.utils.plotting import plot_feature_importance, plot_model_summary, save
 
 
 MLFLOW_EXPERIMENT = "nba-draft-prospect-regression"
-REGRESSION_TARGETS = {"plus_minus", "composite_score"}
-TARGET_MODE = "composite_score"
+REGRESSION_TARGETS = {"plus_minus", "composite_score", "nba_role_zscore"}
+TARGET_MODE = "nba_role_zscore"
 USE_DRAFT_PICK = False
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
 
@@ -284,10 +286,17 @@ def plot_results(results, y_test, col_info, target_mode=TARGET_MODE, plot_dir=AR
     plot_model_summary(results, target_mode, "regression", artifact_dir=plot_dir)
 
 
+_TIER_LABELS = ["Bust", "Bench", "Starter", "Star"]
+
+
 def _plot_regression(results, y_test, target_mode, plot_dir):
     n = len(results)
-    fig, axes = plt.subplots(2, n, figsize=(6 * n, 10))
+    show_tiers = target_mode == "nba_role_zscore"
+    n_rows = 3 if show_tiers else 2
+    fig, axes = plt.subplots(n_rows, n, figsize=(6 * n, 5 * n_rows))
     fig.suptitle(f"NBA {target_mode} Prediction from College Stats", fontsize=14, fontweight="bold")
+
+    actual_tiers = _assign_tier_thresholded(y_test).value_counts().sort_index() if show_tiers else None
 
     for col_idx, (name, res) in enumerate(results.items()):
         y_pred = res["y_pred"]
@@ -311,6 +320,20 @@ def _plot_regression(results, y_test, target_mode, plot_dir):
         ax2.set_ylabel("Residual (Actual - Predicted)")
         ax2.set_title(f"{name} Residuals")
 
+        if show_tiers:
+            pred_series = pd.Series(y_pred, index=y_test.index)
+            pred_tiers = _assign_tier_thresholded(pred_series).value_counts().sort_index()
+            ax3 = axes[2][col_idx]
+            x = np.arange(4)
+            w = 0.35
+            ax3.bar(x - w / 2, [actual_tiers.get(i, 0) for i in range(4)], width=w, label="Actual", color="steelblue")
+            ax3.bar(x + w / 2, [pred_tiers.get(i, 0) for i in range(4)], width=w, label="Predicted", color="darkorange")
+            ax3.set_xticks(x)
+            ax3.set_xticklabels(_TIER_LABELS)
+            ax3.set_title(f"{name} Tier Distribution")
+            ax3.set_ylabel("Count")
+            ax3.legend(fontsize=8)
+
     plt.tight_layout()
     save_and_log(
         fig,
@@ -321,9 +344,10 @@ def _plot_regression(results, y_test, target_mode, plot_dir):
 
 
 def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=None, run_name=None, tracking_uri=None):
-    model_cfg     = (cfg or {}).get("model", {}) or {}
-    composite_cfg = model_cfg.get("composite_score") or {}
-    xgb_cfg       = model_cfg.get("regression", {}).get("xgboost") or {}
+    model_cfg          = (cfg or {}).get("model", {}) or {}
+    composite_cfg      = model_cfg.get("composite_score") or {}
+    xgb_cfg            = model_cfg.get("regression", {}).get("xgboost") or {}
+    target_score_mode  = (model_cfg.get("nba_role_score") or {}).get("target_score_mode", "global")
     df = load_data(composite_cfg=composite_cfg) if df is None else df
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
@@ -340,6 +364,7 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
             {
                 "model_family": "regression",
                 "target": target_mode,
+                "target_score_mode": target_score_mode,
                 "use_draft_pick": use_draft_pick,
             }
         )

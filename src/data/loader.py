@@ -78,7 +78,7 @@ POSITION_FEATURE        = "Pos"
 PROSPECT_CONTEXT_FEATURE  = "prospect_context_score"
 TEAM_DIFFICULTY_FEATURE   = "team_difficulty_score"
 MPG_MINUTES_FEATURE       = "mpg_minutes"
-PROSPECT_CONTEXT_MODE     = "composite"  # "composite" | "individual" | "both" | "none"
+PROSPECT_CONTEXT_MODE     = "individual"  # "composite" | "individual" | "both" | "none"
 
 # ── Prospect Context Score config ──────────────────────────────────────────────
 
