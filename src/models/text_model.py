@@ -769,24 +769,24 @@ def train_and_evaluate_text_model(
 
         if save_path:
             ckpt_parent = os.path.dirname(os.path.abspath(save_path))
-        if ckpt_parent:
-            os.makedirs(ckpt_parent, exist_ok=True)
-        torch.save(
-            {
-                "model_state": model.state_dict(),
-                "target_mean": target_mean,
-                "target_std": target_std,
-                "star_threshold": star_threshold,
-                "pretrained": pretrained,
-                "output_dim": output_dim,
-                "freeze_base": freeze_base,
-                "max_length": max_length,
-                "hidden_dim": 64,
-                "dropout": 0.2,
-            },
-            save_path,
-        )
-        print(f"\nCheckpoint saved to {save_path}")
+            if ckpt_parent:
+                os.makedirs(ckpt_parent, exist_ok=True)
+            torch.save(
+                {
+                    "model_state": model.state_dict(),
+                    "target_mean": target_mean,
+                    "target_std": target_std,
+                    "star_threshold": star_threshold,
+                    "pretrained": pretrained,
+                    "output_dim": output_dim,
+                    "freeze_base": freeze_base,
+                    "max_length": max_length,
+                    "hidden_dim": 64,
+                    "dropout": 0.2,
+                },
+                save_path,
+            )
+            print(f"\nCheckpoint saved to {save_path}")
 
     (
         y_test,
