@@ -730,25 +730,22 @@ def train_and_evaluate_text_model(
                 "n_train": len(train_df),
                 "n_val": len(val_df),
                 "n_test": len(test_df),
-                "train_years": list(TRAIN_YEARS),
-                "val_years": list(VAL_YEARS),
-                "test_years": list(TEST_YEARS),
             }
         )
-    criterion = WeightedAntiCollapseLoss(
-        tail_weight=tail_weight,
-        variance_penalty=variance_penalty,
-        use_huber=True,
-        huber_beta=1.0,
-        overpredict_discount=overpredict_discount,
-        high_pred_relief=high_pred_relief,
-        underpredict_high_target_boost=underpredict_high_target_boost,
-        classification_weight=classification_weight,
-        star_pos_weight=star_pos_weight,
-        survived_pos_weight=survived_pos_weight,
-        starter_pos_weight=starter_pos_weight,
-        auxiliary_regression_weight=auxiliary_regression_weight,
-    )
+        criterion = WeightedAntiCollapseLoss(
+            tail_weight=tail_weight,
+            variance_penalty=variance_penalty,
+            use_huber=True,
+            huber_beta=1.0,
+            overpredict_discount=overpredict_discount,
+            high_pred_relief=high_pred_relief,
+            underpredict_high_target_boost=underpredict_high_target_boost,
+            classification_weight=classification_weight,
+            star_pos_weight=star_pos_weight,
+            survived_pos_weight=survived_pos_weight,
+            starter_pos_weight=starter_pos_weight,
+            auxiliary_regression_weight=auxiliary_regression_weight,
+        )
 
         best_state: dict[str, torch.Tensor] | None = None
         best_val = float("inf")
@@ -771,7 +768,7 @@ def train_and_evaluate_text_model(
             model.load_state_dict(best_state)
 
         if save_path:
-        ckpt_parent = os.path.dirname(os.path.abspath(save_path))
+            ckpt_parent = os.path.dirname(os.path.abspath(save_path))
         if ckpt_parent:
             os.makedirs(ckpt_parent, exist_ok=True)
         torch.save(
@@ -807,7 +804,7 @@ def train_and_evaluate_text_model(
         target_mean=target_mean,
         target_std=target_std,
     )
-        metrics = _metrics(
+    metrics = _metrics(
         y_test,
         y_pred,
         star_prob,
@@ -817,21 +814,21 @@ def train_and_evaluate_text_model(
         starter_prob=starter_prob,
         starter_true=starter_true,
     )
-        mlflow.log_metrics(metrics)
-        mlflow.log_metric("best_val_loss", float(best_val))
-        mlflow.pytorch.log_model(model, artifact_path="model")
+    mlflow.log_metrics(metrics)
+    mlflow.log_metric("best_val_loss", float(best_val))
+    mlflow.pytorch.log_model(model, artifact_path="model")
 
-        print("\n" + "=" * 40)
-        print("Text Model Test Metrics")
-        print("=" * 40)
-        print(f"R2   = {metrics['r2']:.4f}")
-        print(f"RMSE = {metrics['rmse']:.4f}")
-        print(f"MAE  = {metrics['mae']:.4f}")
+    print("\n" + "=" * 40)
+    print("Text Model Test Metrics")
+    print("=" * 40)
+    print(f"R2   = {metrics['r2']:.4f}")
+    print(f"RMSE = {metrics['rmse']:.4f}")
+    print(f"MAE  = {metrics['mae']:.4f}")
     print(f"is_star         | AUC={metrics['star_auc']:.4f} AP={metrics['star_ap']:.4f} ACC={metrics['star_acc']:.4f}")
     print(f"survived_3yrs   | AUC={metrics['survived_auc']:.4f} AP={metrics['survived_ap']:.4f} ACC={metrics['survived_acc']:.4f}")
     print(f"became_starter  | AUC={metrics['starter_auc']:.4f} AP={metrics['starter_ap']:.4f} ACC={metrics['starter_acc']:.4f}")
 
-        _plot_text_results(y_test, y_pred, history, plot_dir=mlflow_ctx.plot_dir)
+    _plot_text_results(y_test, y_pred, history, plot_dir=mlflow_ctx.plot_dir)
     return model, metrics
 
 
