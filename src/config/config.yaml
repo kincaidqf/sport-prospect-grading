@@ -93,7 +93,7 @@ data:
   scouting_path: data/scouting/scouting_texts.txt
   nba_path: data/nba/nba_master.csv
   ncaa_path: data/ncaa/ncaa_master.csv
-  target_col: PLUS_MINUS      # NBA performance target
+  target_col: PLUS_MINUS      # NBA performance target (set to VORP with *_vorp.csv)
   test_split: 0.15
   val_split: 0.15
   num_workers: 4

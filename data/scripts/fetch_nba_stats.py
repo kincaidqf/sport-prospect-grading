@@ -19,6 +19,8 @@ import time
 from pathlib import Path
 
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup, Comment
 from nba_api.stats.endpoints import leaguedashplayerstats
 from nba_api.stats.static import players as nba_players
 
@@ -26,6 +28,7 @@ from nba_api.stats.static import players as nba_players
 ROOT = Path(__file__).parent.parent.parent
 PLAYERS_LIST = ROOT / "data" / "scouting" / "players_list.txt"
 OUTPUT_CSV = ROOT / "data" / "nba" / "nba_stats_best_season.csv"
+OUTPUT_CSV_VORP = ROOT / "data" / "nba" / "nba_stats_best_season_vorp.csv"
 
 # Delay between season-level API calls (seconds)
 API_DELAY = 1.0
@@ -45,6 +48,12 @@ KEEP_COLS = [
 
 
 # ── Parsing ────────────────────────────────────────────────────────────────────
+
+def normalize_player_name(name: str) -> str:
+    """Normalize player names for cross-source matching."""
+    cleaned = re.sub(r"[.\']", "", str(name)).lower()
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
 
 def parse_players_list(path: Path) -> list[dict]:
     """
@@ -121,11 +130,61 @@ def fetch_season_stats(season: str) -> pd.DataFrame | None:
         cols_present = [c for c in KEEP_COLS if c in df.columns]
         df = df[cols_present].copy()
         df["SEASON_ID"] = season
+        df["PLAYER_NAME_NORM"] = df["PLAYER_NAME"].apply(normalize_player_name)
         df["PLUS_MINUS"] = pd.to_numeric(df["PLUS_MINUS"], errors="coerce")
         df["PTS"] = pd.to_numeric(df["PTS"], errors="coerce")
         return df
     except Exception as exc:
         print(f"  [WARN] Failed to fetch season {season}: {exc}")
+        return None
+
+
+def fetch_vorp_for_season(season: str) -> pd.DataFrame | None:
+    """
+    Fetch Basketball-Reference advanced stats for a season and return:
+      PLAYER_NAME_NORM, VORP
+    """
+    end_year = int(season.split("-")[1])
+    end_year += 2000
+    url = f"https://www.basketball-reference.com/leagues/NBA_{end_year}_advanced.html"
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        table = soup.find("table", {"id": "advanced"}) or soup.find("table", {"id": "advanced_stats"})
+        if table is None:
+            # Basketball Reference sometimes stores large tables in HTML comments.
+            for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
+                if "id=\"advanced\"" in comment or "id=\"advanced_stats\"" in comment:
+                    comment_soup = BeautifulSoup(comment, "html.parser")
+                    table = comment_soup.find("table", {"id": "advanced"}) or comment_soup.find("table", {"id": "advanced_stats"})
+                    if table is not None:
+                        break
+        if table is None:
+            return None
+
+        rows = []
+        for tr in table.find("tbody").find_all("tr"):
+            if "class" in tr.attrs and "thead" in tr.attrs["class"]:
+                continue
+            player_cell = tr.find("td", {"data-stat": "player"}) or tr.find("th", {"data-stat": "name_display"}) or tr.find("td", {"data-stat": "name_display"})
+            vorp_cell = tr.find("td", {"data-stat": "vorp"})
+            if player_cell is None:
+                continue
+            player_name = player_cell.get_text(strip=True)
+            vorp_val = pd.to_numeric(vorp_cell.get_text(strip=True) if vorp_cell else None, errors="coerce")
+            rows.append({
+                "PLAYER_NAME_NORM": normalize_player_name(player_name),
+                "VORP": vorp_val,
+            })
+        if not rows:
+            return None
+
+        advanced = pd.DataFrame(rows).drop_duplicates(subset=["PLAYER_NAME_NORM"], keep="first")
+        return advanced[["PLAYER_NAME_NORM", "VORP"]]
+    except Exception as exc:
+        print(f"  [WARN] Failed to fetch VORP for season {season}: {exc}")
         return None
 
 
@@ -182,12 +241,18 @@ def main() -> None:
 
     # 4. Bulk-fetch all seasons
     season_data: dict[str, pd.DataFrame] = {}
+    season_vorp: dict[str, pd.DataFrame] = {}
     for i, season in enumerate(seasons_sorted, 1):
         print(f"  [{i:02d}/{len(seasons_sorted)}] {season} … ", end="", flush=True)
         df = fetch_season_stats(season)
         if df is not None:
             season_data[season] = df
-            print(f"{len(df)} players")
+            vorp_df = fetch_vorp_for_season(season)
+            if vorp_df is not None:
+                season_vorp[season] = vorp_df
+                print(f"{len(df)} players, {len(vorp_df)} VORP rows")
+            else:
+                print(f"{len(df)} players, VORP unavailable")
         else:
             print("no data / future season")
         time.sleep(API_DELAY)
@@ -216,7 +281,18 @@ def main() -> None:
             df = season_data[season]
             row = df[df["PLAYER_ID"] == player_id]
             if not row.empty:
-                candidate_rows.append(row.iloc[0].to_dict())
+                row_dict = row.iloc[0].to_dict()
+                vorp_df = season_vorp.get(season)
+                if vorp_df is not None:
+                    name_norm = row_dict.get("PLAYER_NAME_NORM")
+                    vorp_match = vorp_df[vorp_df["PLAYER_NAME_NORM"] == name_norm]
+                    row_dict["VORP"] = (
+                        pd.to_numeric(vorp_match.iloc[0]["VORP"], errors="coerce")
+                        if not vorp_match.empty else pd.NA
+                    )
+                else:
+                    row_dict["VORP"] = pd.NA
+                candidate_rows.append(row_dict)
 
         if not candidate_rows:
             results.append({
@@ -254,9 +330,10 @@ def main() -> None:
 
         results.append({**base, "note": "ok", **best.to_dict()})
 
-    # 6. Write output CSV
+    # 6. Write output CSVs
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     out_df = pd.DataFrame(results)
+    out_df_vorp = out_df.copy()
 
     # Prioritise key columns first
     priority = [
@@ -269,10 +346,17 @@ def main() -> None:
         "TEAM_ABBREVIATION", "note",
     ]
     ordered = [c for c in priority if c in out_df.columns]
-    remaining = [c for c in out_df.columns if c not in ordered]
+    remaining = [c for c in out_df.columns if c not in ordered and c != "VORP" and c != "PLAYER_NAME_NORM"]
     out_df = out_df[ordered + remaining]
 
+    # Separate VORP output keeps base columns and appends VORP metadata.
+    vorp_priority = priority + ["VORP"]
+    vorp_ordered = [c for c in vorp_priority if c in out_df_vorp.columns]
+    vorp_remaining = [c for c in out_df_vorp.columns if c not in vorp_ordered and c != "PLAYER_NAME_NORM"]
+    out_df_vorp = out_df_vorp[vorp_ordered + vorp_remaining]
+
     out_df.to_csv(OUTPUT_CSV, index=False)
+    out_df_vorp.to_csv(OUTPUT_CSV_VORP, index=False)
 
     # Summary
     ok = (out_df["note"] == "ok").sum()
@@ -281,6 +365,7 @@ def main() -> None:
 
     print(f"{'='*60}")
     print(f"Output → {OUTPUT_CSV}")
+    print(f"VORP Output → {OUTPUT_CSV_VORP}")
     print(f"Total players      : {len(player_list)}")
     print(f"  With data (ok)   : {ok}")
     print(f"  Not in NBA API   : {not_found}")
