@@ -475,30 +475,34 @@ class PositionGroupNormalizer(BaseEstimator, TransformerMixin):
     position is not seen during fit fall back to global stats.
     """
 
-    def __init__(self, feature_cols: list[str], pos_col: str = "pos_group"):
-        self.feature_cols = list(feature_cols)
+    def __init__(self, feature_cols, pos_col: str = "pos_group"):
+        # sklearn's clone() requires __init__ to store params with the exact same
+        # identity; do not wrap in list() here.
+        self.feature_cols = feature_cols
         self.pos_col = pos_col
 
     def fit(self, X, y=None):
+        cols = list(self.feature_cols)
         df = X if isinstance(X, pd.DataFrame) else pd.DataFrame(X)
-        feat = df[self.feature_cols].astype(float)
+        feat = df[cols].astype(float)
         self.global_mean_ = feat.mean()
         self.global_std_  = feat.std().clip(lower=1e-8)
         self.group_stats_: dict = {}
         for group, subset in df.groupby(self.pos_col):
-            s = subset[self.feature_cols].astype(float)
+            s = subset[cols].astype(float)
             mean = s.mean()
             std  = s.std().clip(lower=1e-8).fillna(self.global_std_)
             self.group_stats_[group] = (mean, std)
         return self
 
     def transform(self, X):
+        cols = list(self.feature_cols)
         df = X.copy() if isinstance(X, pd.DataFrame) else pd.DataFrame(X).copy()
-        df[self.feature_cols] = df[self.feature_cols].astype(float)
+        df[cols] = df[cols].astype(float)
         for group in df[self.pos_col].unique():
             mask = df[self.pos_col] == group
             mean, std = self.group_stats_.get(group, (self.global_mean_, self.global_std_))
-            df.loc[mask, self.feature_cols] = (df.loc[mask, self.feature_cols] - mean) / std
+            df.loc[mask, cols] = (df.loc[mask, cols] - mean) / std
         return df
 
 

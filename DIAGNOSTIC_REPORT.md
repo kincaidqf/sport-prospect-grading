@@ -341,8 +341,6 @@ Class balancing (`sample_weight`) is applied in the final artifact fit but not d
 
 ### Target Construction Improvements
 
-**Separate playing-time from performance in the target** — `nba_role_zscore` heavily weights MIN (30%). A player who plays 30 mpg poorly and one who plays 20 mpg excellently may score similarly. Separating "did they stick?" (years in league, GP) from "how good were they?" (efficiency metrics) could yield cleaner learning signal.
-
 **Survival framing** — instead of averaging NBA stats over 3 years, model the probability of *still being in the league* at year 3 as a separate signal from average performance. Many busts play briefly; modeling this as a two-stage problem (make it to year 3?) × (how good in year 3?) could be more informative.
 
 ---
