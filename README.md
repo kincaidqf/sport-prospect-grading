@@ -17,7 +17,8 @@ Entry point that loads YAML config, resolves compute device, and dispatches to t
 
 #### `src/models/`
 - **`regression_model.py`**: Lasso/Ridge regression model predicting NBA PLUS_MINUS (best season) from final-year NCAA college stats. Uses Lasso for feature selection due to high multicollinearity.
-- **`text_model.py`**: NLP encoder (ScoutingReportEncoder) for fine-tuning transformer models on scouting report texts.
+- **`text_model.py`**: NLP encoder (ScoutingReportEncoder) for fine-tuning transformer models on scouting report texts. Pass `save_path=` to `train_and_evaluate_text_model` to persist weights for interpretability.
+- **`interpret_text.py`**: Probes, aggregated occlusion, corpus log-odds, VADER sentiment correlations, and `outputs/interpretability/REPORT.md` for all prediction heads.
 - **`multimodal_model.py`**: Combines NCAA stats features + scouting report embeddings for joint prediction.
 
 #### `src/training/`
@@ -105,6 +106,18 @@ make train
 make build-gpu
 make train-gpu
 ```
+
+### Text model interpretability
+
+Train with a checkpoint path, then run interpretability (from repo root):
+
+```bash
+uv run python -c "from src.models.text_model import train_and_evaluate_text_model; train_and_evaluate_text_model(save_path='outputs/checkpoints/text_model.pt')"
+
+uv run python -m src.models.interpret_text --checkpoint outputs/checkpoints/text_model.pt
+```
+
+Use `--retrain --checkpoint-out ...` to train and interpret in one step. Outputs land in `outputs/interpretability/`.
 
 ### Jupyter Notebook
 

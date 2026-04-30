@@ -1,9 +1,6 @@
 """Feature engineering and train/val/test splitting."""
 from __future__ import annotations
 
-from typing import Optional
-
-import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -64,7 +61,11 @@ def load_and_merge(
     nba_path: str,
     target_col: str = "PLUS_MINUS",
 ) -> pd.DataFrame:
-    """Merge NCAA features with NBA target labels into a single DataFrame."""
+    """Merge NCAA features with NBA target labels into a single DataFrame.
+
+    `target_col` can be PLUS_MINUS (default) or VORP when using the
+    VORP-enriched NBA output file.
+    """
     ncaa = pd.read_csv(ncaa_path)
     nba = pd.read_csv(nba_path)
     # TODO: define merge key after EDA (likely player name + draft year)
