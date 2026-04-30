@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+import yaml
 from bs4 import BeautifulSoup, Comment
 from nba_api.stats.endpoints import leaguedashplayerstats
 from nba_api.stats.static import players as nba_players
@@ -29,6 +30,7 @@ ROOT = Path(__file__).parent.parent.parent
 PLAYERS_LIST = ROOT / "data" / "scouting" / "players_list.txt"
 OUTPUT_CSV = ROOT / "data" / "nba" / "nba_stats_best_season.csv"
 OUTPUT_CSV_VORP = ROOT / "data" / "nba" / "nba_stats_best_season_vorp.csv"
+CONFIG_PATH = ROOT / "src" / "config" / "config.yaml"
 
 # Delay between season-level API calls (seconds)
 API_DELAY = 1.0
@@ -45,6 +47,18 @@ KEEP_COLS = [
     "OREB", "DREB", "REB", "AST", "STL", "BLK", "TOV", "PF", "PTS",
     "PLUS_MINUS",
 ]
+
+
+# ── Config ─────────────────────────────────────────────────────────────────────
+
+def load_best_season_mode() -> str:
+    """Read data.best_season_mode from config.yaml; default composite."""
+    try:
+        with open(CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f)
+        return cfg.get("data", {}).get("best_season_mode", "composite")
+    except Exception:
+        return "composite"
 
 
 # ── Parsing ────────────────────────────────────────────────────────────────────
@@ -213,6 +227,9 @@ def build_player_id_map(player_list: list[dict]) -> dict[str, int | None]:
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    mode = load_best_season_mode()
+    print(f"Best-season mode: {mode}\n")
+
     # 1. Parse player list
     print("Parsing players list …")
     player_list = parse_players_list(PLAYERS_LIST)
@@ -301,32 +318,37 @@ def main() -> None:
             })
             continue
 
-        # Best season = highest composite role score.
-        # For each role stat, min-max scale within this player's candidate seasons,
-        # then average the scaled values. NaN stats contribute 0 (missing stat
-        # doesn't disqualify a season; it just doesn't help it).
-        # Fall back to highest PTS if all role stats are NaN across all seasons.
         candidates_df = pd.DataFrame(candidate_rows)
         for col in ROLE_STATS:
             candidates_df[col] = pd.to_numeric(candidates_df[col], errors="coerce")
+        if "VORP" in candidates_df.columns:
+            candidates_df["VORP"] = pd.to_numeric(candidates_df["VORP"], errors="coerce")
 
-        has_role_data = candidates_df[ROLE_STATS].notna().any().any()
+        best = None
 
-        if has_role_data:
-            scaled = pd.DataFrame(index=candidates_df.index)
-            for col in ROLE_STATS:
-                col_min = candidates_df[col].min()
-                col_max = candidates_df[col].max()
-                if pd.notna(col_min) and pd.notna(col_max) and col_max > col_min:
-                    scaled[col] = (candidates_df[col] - col_min) / (col_max - col_min)
-                else:
-                    scaled[col] = 0.0  # identical or all-NaN stat — contributes nothing
-            candidates_df["_selection_score"] = scaled.fillna(0.0).mean(axis=1)
-            best = candidates_df.loc[candidates_df["_selection_score"].idxmax()]
-            best = best.drop("_selection_score")
-        else:
-            candidates_df["PTS"] = pd.to_numeric(candidates_df["PTS"], errors="coerce")
-            best = candidates_df.loc[candidates_df["PTS"].idxmax()]
+        # vorp mode: pick the season with the highest VORP.
+        if mode == "vorp" and "VORP" in candidates_df.columns and candidates_df["VORP"].notna().any():
+            best = candidates_df.loc[candidates_df["VORP"].idxmax()]
+
+        # composite mode (also fallback when VORP is unavailable):
+        # min-max scale each role stat within the player's candidate seasons,
+        # average the scaled values, pick the highest. NaN stats contribute 0.
+        # Final fallback to max PTS if all role stats are also NaN.
+        if best is None:
+            has_role_data = candidates_df[ROLE_STATS].notna().any().any()
+            if has_role_data:
+                scaled = pd.DataFrame(index=candidates_df.index)
+                for col in ROLE_STATS:
+                    col_min = candidates_df[col].min()
+                    col_max = candidates_df[col].max()
+                    if pd.notna(col_min) and pd.notna(col_max) and col_max > col_min:
+                        scaled[col] = (candidates_df[col] - col_min) / (col_max - col_min)
+                    else:
+                        scaled[col] = 0.0
+                candidates_df["_selection_score"] = scaled.fillna(0.0).mean(axis=1)
+                best = candidates_df.loc[candidates_df["_selection_score"].idxmax()].drop("_selection_score")
+            else:
+                best = candidates_df.loc[candidates_df["PTS"].idxmax()]
 
         results.append({**base, "note": "ok", **best.to_dict()})
 

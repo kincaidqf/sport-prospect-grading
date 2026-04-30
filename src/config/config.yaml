@@ -93,6 +93,7 @@ data:
   scouting_path: data/scouting/scouting_texts.txt
   nba_path: data/nba/nba_master.csv
   ncaa_path: data/ncaa/ncaa_master.csv
+  best_season_mode: composite  # composite | vorp — controls which of a player's first 3 NBA seasons is kept as "best" when running fetch_nba_stats.py / recover_nba_players.py
   target_col: PLUS_MINUS      # NBA performance target (set to VORP with *_vorp.csv)
   test_split: 0.15
   val_split: 0.15

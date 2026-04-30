@@ -32,6 +32,7 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+import yaml
 from bs4 import BeautifulSoup, Comment
 from nba_api.stats.endpoints import commonallplayers, leaguedashplayerstats
 from nba_api.stats.static import players as nba_static
@@ -45,6 +46,7 @@ OUTPUT_CSV = ROOT / "data" / "nba" / "nba_stats_best_season.csv"
 OUTPUT_CSV_VORP = ROOT / "data" / "nba" / "nba_stats_best_season_vorp.csv"
 RECOVERED_VORP_OUTPUT = ROOT / "data" / "nba" / "nba_stats_best_season_recovered_vorp.csv"
 SEASON_CACHE_DIR = ROOT / "data" / "nba" / "season_cache"
+CONFIG_PATH = ROOT / "src" / "config" / "config.yaml"
 
 API_DELAY = 1.0
 NCAA_CLASSES = {"Freshman", "Sophomore", "Junior", "Senior", "Class of 2021", "HS Senior"}
@@ -55,6 +57,18 @@ KEEP_COLS = [
     "FTM", "FTA", "FT_PCT", "OREB", "DREB", "REB",
     "AST", "STL", "BLK", "TOV", "PF", "PTS", "PLUS_MINUS",
 ]
+
+
+# ── Config ─────────────────────────────────────────────────────────────────────
+
+def load_best_season_mode() -> str:
+    """Read data.best_season_mode from config.yaml; default composite."""
+    try:
+        with open(CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f)
+        return cfg.get("data", {}).get("best_season_mode", "composite")
+    except Exception:
+        return "composite"
 
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
@@ -291,7 +305,12 @@ def fetch_vorp_for_season(season: str) -> pd.DataFrame | None:
 ROLE_STATS = ["MIN", "PTS", "REB", "AST", "STL", "BLK"]
 
 
-def get_best_season(player_id: int, eligible_seasons: list[str]) -> dict | None:
+def get_best_season(
+    player_id: int,
+    eligible_seasons: list[str],
+    mode: str = "composite",
+    season_vorp_map: dict | None = None,
+) -> dict | None:
     candidates = []
     for season in eligible_seasons:
         df = load_or_fetch_season(season)
@@ -299,16 +318,30 @@ def get_best_season(player_id: int, eligible_seasons: list[str]) -> dict | None:
             continue
         row = df[df["PLAYER_ID"] == player_id]
         if not row.empty:
-            candidates.append(row.iloc[0].to_dict())
+            row_dict = row.iloc[0].to_dict()
+            if mode == "vorp" and season_vorp_map is not None:
+                vorp_df = season_vorp_map.get(season)
+                name_norm = row_dict.get("PLAYER_NAME_NORM")
+                if vorp_df is not None and name_norm:
+                    match = vorp_df[vorp_df["PLAYER_NAME_NORM"] == name_norm]
+                    row_dict["VORP"] = match.iloc[0]["VORP"] if not match.empty else pd.NA
+                else:
+                    row_dict["VORP"] = pd.NA
+            candidates.append(row_dict)
     if not candidates:
         return None
+
     cdf = pd.DataFrame(candidates)
     for col in ROLE_STATS:
         cdf[col] = pd.to_numeric(cdf[col], errors="coerce")
 
+    if mode == "vorp" and "VORP" in cdf.columns:
+        cdf["VORP"] = pd.to_numeric(cdf["VORP"], errors="coerce")
+        if cdf["VORP"].notna().any():
+            return cdf.loc[cdf["VORP"].idxmax()].to_dict()
+
     has_role_data = cdf[ROLE_STATS].notna().any().any()
     if not has_role_data:
-        cdf["PTS"] = pd.to_numeric(cdf["PTS"], errors="coerce")
         return cdf.loc[cdf["PTS"].idxmax()].to_dict()
 
     scaled = pd.DataFrame(index=cdf.index)
@@ -395,6 +428,9 @@ def parse_players_list(path: Path) -> list[dict]:
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    mode = load_best_season_mode()
+    print(f"Best-season mode: {mode}\n")
+
     # 1. Parse full player list
     player_list = parse_players_list(PLAYERS_LIST)
     meta = load_player_meta()
@@ -467,6 +503,18 @@ def main() -> None:
         load_or_fetch_season(season)
         time.sleep(API_DELAY)
 
+    # Build VORP lookup map when vorp mode is active.
+    season_vorp_map: dict = {}
+    if mode == "vorp":
+        print(f"\nFetching VORP data for {len(needed_seasons)} seasons …")
+        for season in sorted(needed_seasons):
+            sy = int(season.split("-")[0])
+            if sy > max_season_start:
+                continue
+            vorp_df = fetch_vorp_for_season(season)
+            season_vorp_map[season] = vorp_df
+            time.sleep(API_DELAY)
+
     # 6. Build updated stats for recovered players
     new_rows: dict[str, dict] = {}
     for entry in to_recover:
@@ -477,7 +525,7 @@ def main() -> None:
         eligible = draft_year_to_seasons(entry["draft_year"])
         eligible = [s for s in eligible if int(s.split("-")[0]) <= max_season_start]
 
-        best = get_best_season(pid, eligible)
+        best = get_best_season(pid, eligible, mode=mode, season_vorp_map=season_vorp_map)
         if best:
             new_rows[name] = {
                 **entry,
