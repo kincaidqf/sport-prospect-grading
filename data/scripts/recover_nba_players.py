@@ -235,6 +235,9 @@ def load_or_fetch_season(season: str) -> pd.DataFrame | None:
         return None
 
 
+ROLE_STATS = ["MIN", "PTS", "REB", "AST", "STL", "BLK"]
+
+
 def get_best_season(player_id: int, eligible_seasons: list[str]) -> dict | None:
     candidates = []
     for season in eligible_seasons:
@@ -247,11 +250,25 @@ def get_best_season(player_id: int, eligible_seasons: list[str]) -> dict | None:
     if not candidates:
         return None
     cdf = pd.DataFrame(candidates)
-    cdf["PLUS_MINUS"] = pd.to_numeric(cdf["PLUS_MINUS"], errors="coerce")
-    if cdf["PLUS_MINUS"].notna().any():
-        return cdf.loc[cdf["PLUS_MINUS"].idxmax()].to_dict()
-    cdf["PTS"] = pd.to_numeric(cdf["PTS"], errors="coerce")
-    return cdf.loc[cdf["PTS"].idxmax()].to_dict()
+    for col in ROLE_STATS:
+        cdf[col] = pd.to_numeric(cdf[col], errors="coerce")
+
+    has_role_data = cdf[ROLE_STATS].notna().any().any()
+    if not has_role_data:
+        cdf["PTS"] = pd.to_numeric(cdf["PTS"], errors="coerce")
+        return cdf.loc[cdf["PTS"].idxmax()].to_dict()
+
+    scaled = pd.DataFrame(index=cdf.index)
+    for col in ROLE_STATS:
+        col_min = cdf[col].min()
+        col_max = cdf[col].max()
+        if pd.notna(col_min) and pd.notna(col_max) and col_max > col_min:
+            scaled[col] = (cdf[col] - col_min) / (col_max - col_min)
+        else:
+            scaled[col] = 0.0
+    cdf["_selection_score"] = scaled.fillna(0.0).mean(axis=1)
+    best = cdf.loc[cdf["_selection_score"].idxmax()]
+    return best.drop("_selection_score").to_dict()
 
 
 # ── players.csv helpers ────────────────────────────────────────────────────────

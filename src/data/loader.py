@@ -31,8 +31,9 @@ RANDOM_STATE = 42
 TARGET_COL = {
     "plus_minus":      "PLUS_MINUS",
     "became_starter":  "became_starter",
-    "prospect_tier":   "prospect_tier",
-    "composite_score": "composite_score",
+    "prospect_tier":   "prospect_tier",       # 4-class: 0=bust 1=bench 2=starter 3=star
+    "composite_score": "composite_score",      # preserved for backward compat
+    "nba_role_zscore": "nba_role_zscore",      # new regression target
 }
 
 NUMERIC_FEATURES = [
@@ -167,6 +168,37 @@ _CLASS_SCORE: dict[str, float] = {
 
 _MPG_CAP = 30.0
 
+# ── Position mapping ───────────────────────────────────────────────────────────
+
+_POS_BROAD_MAP: dict[str, str] = {
+    "Point Guard":    "Guard",
+    "Shooting Guard": "Guard",
+    "Guard":          "Guard",
+    "Small Forward":  "Forward",
+    "Power Forward":  "Forward",
+    "Forward":        "Forward",
+    "Center":         "Center",
+}
+
+
+def _map_pos_group(pos_str: str) -> str:
+    """Map a written-out position string to Guard / Forward / Center.
+
+    Splits on '/' and uses only the primary (first) position, so
+    'Shooting Guard/Small Forward' → 'Guard'.
+    Unknown strings (including '-') fall back to 'Forward'.
+    Handles both the full written-out NCAA/NBA format and the abbreviated
+    G / F / C values present in the NCAA Pos column.
+    """
+    primary = str(pos_str).strip().split("/")[0].strip()
+    if primary == "G":
+        return "Guard"
+    if primary == "C":
+        return "Center"
+    if primary in ("F", "-"):
+        return "Forward"
+    return _POS_BROAD_MAP.get(primary, "Forward")
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -248,22 +280,76 @@ def _assign_tier(composite, percentiles=(50, 80)):
     return pd.Series(np.digitize(composite.values, cuts), index=composite.index, dtype=int)
 
 
+def _compute_nba_role_score(df, mode, weights, winsor_clip=2.5, nan_floor=-3.0):
+    """Weighted, winsorized z-score composite of NBA role stats.
+
+    Each stat is z-scored (globally or within pos group), clipped at ±winsor_clip,
+    then combined as a weighted average (missing stats excluded from denominator).
+    The composite is re-standardized to std=1 so tier thresholds are mode-invariant.
+    Players with no NBA data receive nan_floor.
+    """
+    stat_cols = list(weights.keys())
+    z_parts = {}
+
+    for col in stat_cols:
+        s = pd.to_numeric(df[col], errors="coerce")
+        if mode == "position_relative":
+            z = df.groupby("nba_pos_group")[col].transform(
+                lambda x: (x - x.mean()) / (x.std() if x.std() > 0 else 1.0)
+            )
+        else:
+            mu, sigma = s.mean(), s.std()
+            z = (s - mu) / (sigma if sigma > 0 else 1.0)
+        z_parts[col] = z.clip(-winsor_clip, winsor_clip)
+
+    # Weighted average; missing stats contribute 0 to numerator, excluded from denominator
+    numerator   = sum(weights[c] * z_parts[c].fillna(0.0) for c in stat_cols)
+    denominator = sum(
+        weights[c] * z_parts[c].notna().astype(float) for c in stat_cols
+    )
+    combined = numerator / denominator.replace(0.0, np.nan)
+
+    # Re-standardize so std=1 regardless of mode or weight set
+    mu_c, sigma_c = combined.mean(), combined.std()
+    role_zscore = (combined - mu_c) / (sigma_c if sigma_c > 0 else 1.0)
+
+    return role_zscore.fillna(nan_floor)
+
+
+def _assign_tier_thresholded(zscore, thresholds=(-0.5, 0.5, 1.5)):
+    """Bin z-scores into 4 fixed tiers: 0=Bust, 1=Bench, 2=Starter, 3=Star."""
+    lo, mid, hi = thresholds
+    bins   = [-np.inf, lo, mid, hi, np.inf]
+    labels = [0, 1, 2, 3]
+    return pd.cut(zscore, bins=bins, labels=labels).astype(int)
+
+
 # ── Data loading ───────────────────────────────────────────────────────────────
 
 def load_data(composite_cfg=None):
     ncaa = pd.read_csv(NCAA_PATH)
     nba  = pd.read_csv(NBA_PATH)
 
+    _nba_cols = nba[["player_name", "draft_year", "PLUS_MINUS", "MIN", "GP", "player_id",
+                      "PTS", "REB", "AST", "STL", "BLK", "position"]].rename(columns={
+        "PTS":      "nba_pts",
+        "REB":      "nba_reb",
+        "AST":      "nba_ast",
+        "STL":      "nba_stl",
+        "BLK":      "nba_blk",
+        "position": "nba_position",
+    })
     df = ncaa.merge(
-        nba[["player_name", "draft_year", "PLUS_MINUS", "MIN", "GP", "player_id"]],
+        _nba_cols,
         left_on=["Name", "draft_year"],
         right_on=["player_name", "draft_year"],
         how="inner",
     )
 
     # Config is the source of truth. Auto-load when caller passes nothing or empty dict.
+    _full_cfg = _load_project_config().get("model") or {}
     if not composite_cfg:
-        composite_cfg = (_load_project_config().get("model") or {}).get("composite_score") or {}
+        composite_cfg = _full_cfg.get("composite_score") or {}
     _cfg             = composite_cfg
     w_min            = _cfg.get("w_min", 0.55)
     w_gp             = _cfg.get("w_gp", 0.30)
@@ -271,15 +357,39 @@ def load_data(composite_cfg=None):
     tier_percentiles = tuple(_cfg.get("tier_percentiles", (50, 80)))
     nan_floor        = float(_cfg.get("nan_floor", -3.0))
 
-    # Derived targets
+    # nba_role_score config
+    _role_cfg         = _full_cfg.get("nba_role_score") or {}
+    _role_mode        = _role_cfg.get("target_score_mode", "global")
+    _role_weights     = _role_cfg.get("weights") or {
+        "MIN": 0.30, "nba_pts": 0.25, "nba_reb": 0.20,
+        "nba_ast": 0.15, "nba_stl": 0.05, "nba_blk": 0.05,
+    }
+    _role_winsor      = float(_role_cfg.get("winsor_clip", 2.5))
+    _role_thresholds  = tuple(_role_cfg.get("tier_thresholds", (-0.5, 0.5, 1.5)))
+    _role_nan_floor   = float(_role_cfg.get("nan_floor", -3.0))
+
+    # Derived targets — backward-compat targets first, then new role-score targets
     df["became_starter"]  = (df["MIN"] >= 25).astype(int)
     df["composite_score"] = _compute_composite_score(df, w_min=w_min, w_gp=w_gp, w_pm=w_pm, nan_floor=nan_floor)
-    df["prospect_tier"]   = _assign_tier(df["composite_score"], percentiles=tier_percentiles)
+
+    # NBA position group for position-relative mode
+    df["nba_pos_group"] = df["nba_position"].apply(_map_pos_group)
+
+    df["nba_role_zscore"] = _compute_nba_role_score(
+        df, mode=_role_mode, weights=_role_weights,
+        winsor_clip=_role_winsor, nan_floor=_role_nan_floor,
+    )
+    df["prospect_tier"] = _assign_tier_thresholded(df["nba_role_zscore"], thresholds=_role_thresholds)
 
     # Feature engineering
     df["height_in"] = df[HEIGHT_FEATURE].apply(parse_height)
     df[CLASS_FEATURE]    = df[CLASS_FEATURE].str.strip().replace({"Fr": "Fr.", "So": "So.", "Jr": "Jr.", "Sr": "Sr."})
     df[POSITION_FEATURE] = df[POSITION_FEATURE].str.strip()
+
+    # Broad position group (Guard / Forward / Center) derived from the written-out
+    # position column. Used for position-relative z-score computation in Phase 3;
+    # not added to the model feature matrix.
+    df["pos_group"] = df["position"].apply(_map_pos_group)
 
     pos_avg_ht = df.groupby(POSITION_FEATURE)["height_in"].transform("mean")
     df[HEIGHT_DEV_FEATURE] = (df["height_in"] - pos_avg_ht).abs()

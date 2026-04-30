@@ -5,7 +5,8 @@ Strategy (efficient):
   1. Determine all unique NBA seasons needed across every draft class.
   2. Pull LeagueDashPlayerStats once per season — gives PLUS_MINUS + full box.
   3. For each player, look up their stats across their first 3 eligible seasons
-     and keep the single best season (highest PLUS_MINUS).
+     and keep the single best season by composite role score (min-max scaled
+     average of MIN, PTS, REB, AST, STL, BLK).
 
 Draft-year-to-season mapping example:
   2009 draft → 2009-10, 2010-11, 2011-12
@@ -29,7 +30,10 @@ OUTPUT_CSV = ROOT / "data" / "nba" / "nba_stats_best_season.csv"
 # Delay between season-level API calls (seconds)
 API_DELAY = 1.0
 
-# Stat columns to keep in the output (PLUS_MINUS is the priority)
+# Stats used for best-season selection (min-max scaled composite)
+ROLE_STATS = ["MIN", "PTS", "REB", "AST", "STL", "BLK"]
+
+# Stat columns to keep in the output
 KEEP_COLS = [
     "PLAYER_ID", "PLAYER_NAME", "TEAM_ABBREVIATION", "GP", "GS", "MIN",
     "FGM", "FGA", "FG_PCT",
@@ -221,14 +225,29 @@ def main() -> None:
             })
             continue
 
-        # Best season = highest PLUS_MINUS; fall back to PTS if all NaN
+        # Best season = highest composite role score.
+        # For each role stat, min-max scale within this player's candidate seasons,
+        # then average the scaled values. NaN stats contribute 0 (missing stat
+        # doesn't disqualify a season; it just doesn't help it).
+        # Fall back to highest PTS if all role stats are NaN across all seasons.
         candidates_df = pd.DataFrame(candidate_rows)
-        candidates_df["PLUS_MINUS"] = pd.to_numeric(
-            candidates_df["PLUS_MINUS"], errors="coerce"
-        )
+        for col in ROLE_STATS:
+            candidates_df[col] = pd.to_numeric(candidates_df[col], errors="coerce")
 
-        if candidates_df["PLUS_MINUS"].notna().any():
-            best = candidates_df.loc[candidates_df["PLUS_MINUS"].idxmax()]
+        has_role_data = candidates_df[ROLE_STATS].notna().any().any()
+
+        if has_role_data:
+            scaled = pd.DataFrame(index=candidates_df.index)
+            for col in ROLE_STATS:
+                col_min = candidates_df[col].min()
+                col_max = candidates_df[col].max()
+                if pd.notna(col_min) and pd.notna(col_max) and col_max > col_min:
+                    scaled[col] = (candidates_df[col] - col_min) / (col_max - col_min)
+                else:
+                    scaled[col] = 0.0  # identical or all-NaN stat — contributes nothing
+            candidates_df["_selection_score"] = scaled.fillna(0.0).mean(axis=1)
+            best = candidates_df.loc[candidates_df["_selection_score"].idxmax()]
+            best = best.drop("_selection_score")
         else:
             candidates_df["PTS"] = pd.to_numeric(candidates_df["PTS"], errors="coerce")
             best = candidates_df.loc[candidates_df["PTS"].idxmax()]
