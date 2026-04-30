@@ -12,7 +12,8 @@ from sklearn.base import clone
 from sklearn.linear_model import LassoCV, RidgeCV
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.pipeline import Pipeline
-from xgboost import XGBRegressor
+# XGBRegressor is imported lazily inside train_and_evaluate to prevent macOS
+# OpenMP libomp conflicts at module initialization time.
 
 from src.data.loader import (
     PROJECT_ROOT,
@@ -239,6 +240,7 @@ def _run_regression(
                     "use_draft_pick": use_draft_pick,
                 }
             )
+            from xgboost import XGBRegressor  # noqa: PLC0415
             xgb_base = Pipeline(
                 [
                     ("preprocessor", clone(preprocessor)),
