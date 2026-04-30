@@ -2,23 +2,82 @@ defaults:
   - _self_
 
 model:
-  type: regression          # regression | text | multimodal
+  type: regression          # regression | classification | text
+  prospect_context_mode: individual  # individual | composite | both | none
+  input_normalization_mode: global   # global | position_relative
+  nba_role_score:
+    target_score_mode: global       # global | position_relative
+    tier_thresholds: [-0.5, 0.5, 1.5]
+    nan_floor: -3.0
+    winsor_clip: 2.5                # clip each per-stat z-score at ±this value before combining
+    weights:                        # relative weights for the weighted z-score composite
+      MIN: 0.30                     # floor time = role size by definition
+      nba_pts: 0.25                 # primary offensive role signal
+      nba_reb: 0.20                 # role signal; less position-skewed than BLK
+      nba_ast: 0.15                 # role signal, especially for guards
+      nba_stl: 0.05                 # low variance, _noisy, position-influenced
+      nba_blk: 0.05                 # low variance, strongly center-skewed
+  composite_score:          # shared by both regression and classification targets
+    w_min: 0.55            # weight for NBA minutes per game z-score
+    w_gp: 0.30             # weight for NBA games played z-score
+    w_plus_minus: 0.15     # weight for NBA plus/minus z-score
+    tier_percentiles: [50, 80]  # percentile cut points for bust/contributor/star (40/40/20 split)
+    nan_floor: -3.0        # composite score assigned to players with no NBA data
   regression:
-    target_mode: survived_3yrs  # plus_minus | became_starter | survived_3yrs
+    target_mode: nba_role_zscore  # plus_minus | composite_score | nba_role_zscore
     use_draft_pick: false        # include draft pick as a feature (leaks scout judgment)
-    alpha_min: 1e-4         # lasso alpha search range
+    use_engineered_features: false  # add ts_pct, efg_pct, usage_proxy, ast_to, etc.
+    use_pos_categorical: true      # one-hot encode position (Guard/Forward/Center)
+    alpha_min: 1e-4         # lasso/ridge alpha search range
     alpha_max: 1e2
     alpha_steps: 100
-    max_iter: 10000
     cv_folds: 5
+    xgboost:
+      n_estimators: [100, 200]
+      max_depth: [2, 3]
+      learning_rate: [0.05, 0.1]
+      subsample: [0.7, 0.9]
+      colsample_bytree: [0.7, 1.0]
+      min_child_weight: [3, 5, 10]
+      reg_alpha: [0, 0.1, 1]
+      reg_lambda: [1, 5, 10]
+      gamma: [0]
+      cv_folds: 3
+      n_jobs: 1
+      grid_n_jobs: 1
+      pre_dispatch: 1
+  classification:
+    target_mode: prospect_tier  # became_starter | prospect_tier
+    use_draft_pick: false       # include draft pick as a feature (leaks scout judgment)
+    use_engineered_features: false  # add ts_pct, efg_pct, usage_proxy, ast_to, etc.
+    use_pos_categorical: false      # one-hot encode position (Guard/Forward/Center)
+    eval_mode: random           # random | chronological | repeated_cv
+    class_weight: balanced      # null | balanced
+    threshold_tuning: false     # true | false — tune per-class prob offsets on val set
+    selection_metric: f1_macro  # metric used to rank candidate models
+    xgboost:
+      # Conservative defaults for fast smoke tests; expand values for full grid search.
+      # Full range options: n_estimators [100,300], max_depth [2,3], lr [0.02,0.05,0.1],
+      # subsample [0.7,0.9], colsample_bytree [0.7,1.0], min_child_weight [3,5,10],
+      # reg_alpha [0,0.1,1], reg_lambda [1,5,10], gamma [0,0.5]
+      n_estimators: [100, 200]
+      max_depth: [2, 3]
+      learning_rate: [0.05, 0.1]
+      subsample: [0.7, 0.9]
+      colsample_bytree: [1.0]
+      min_child_weight: [3, 10]
+      reg_alpha: [0, 0.1]
+      reg_lambda: [1, 5]
+      gamma: [0]
+      cv_folds: 3
+      n_jobs: 1
+      grid_n_jobs: 1
+      pre_dispatch: 1
   text:
     pretrained: "distilbert-base-uncased"
+    output_dim: 128
     max_length: 512
     freeze_base: false
-  multimodal:
-    fusion: concat           # concat | attention | gate
-    hidden_dim: 256
-    dropout: 0.3
 
 training:
   batch_size: 32
@@ -44,7 +103,13 @@ logging:
   run_name: null             # auto-generated if null
   log_every_n_steps: 10
   save_top_k: 3
+  mlflow:
+    tracking_uri: null       # set to a shared MLflow server or shared folder path for team-wide visibility
+    artifact_location: null  # optional shared artifact root for new experiments
+    experiment_name: null    # optional override for a single shared experiment name
+    experiment_prefix: nba-draft-ml
 
 output:
   dir: outputs/
   checkpoint_dir: outputs/checkpoints/
+  plots_dir: outputs/plots/

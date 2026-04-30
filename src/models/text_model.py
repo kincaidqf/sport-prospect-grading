@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 import glob
 from typing import Sequence
 
 import matplotlib.pyplot as plt
+import mlflow
+import mlflow.pytorch
 import numpy as np
 import pandas as pd
 import torch
@@ -22,6 +25,14 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from transformers import AutoModel, AutoTokenizer
+
+from src.utils.mlflow_utils import (
+    build_mlflow_context,
+    log_common_params,
+    log_config_dict,
+    log_epoch_metrics,
+    managed_run,
+)
 
 
 class ScoutingReportEncoder(nn.Module):
@@ -590,6 +601,9 @@ def train_and_evaluate_text_model(
     batch_size: int = 16,
     epochs: int = 3,
     lr: float = 2e-5,
+    cfg: dict | None = None,
+    run_name: str | None = None,
+    tracking_uri: str | None = None,
     tail_weight: float = 0.8,
     variance_penalty: float = 0.15,
     train_frac: float = 0.70,
@@ -688,6 +702,39 @@ def train_and_evaluate_text_model(
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    history = {"train_loss": [], "val_loss": []}
+    mlflow_ctx = build_mlflow_context(
+        cfg=cfg,
+        model_type="text",
+        target_name=TARGET,
+        fallback_experiment_name="nba-draft-prospect-text",
+        tracking_uri=tracking_uri,
+        run_name=run_name,
+    )
+
+    with managed_run(mlflow_ctx):
+        if cfg is not None:
+            log_config_dict(cfg)
+        log_common_params(
+            {
+                "model_family": "text",
+                "target": TARGET,
+                "pretrained": pretrained,
+                "output_dim": output_dim,
+                "freeze_base": freeze_base,
+                "max_length": max_length,
+                "batch_size": batch_size,
+                "epochs": epochs,
+                "lr": lr,
+                "n_total": len(df),
+                "n_train": len(train_df),
+                "n_val": len(val_df),
+                "n_test": len(test_df),
+                "train_years": list(TRAIN_YEARS),
+                "val_years": list(VAL_YEARS),
+                "test_years": list(TEST_YEARS),
+            }
+        )
     criterion = WeightedAntiCollapseLoss(
         tail_weight=tail_weight,
         variance_penalty=variance_penalty,
@@ -703,24 +750,27 @@ def train_and_evaluate_text_model(
         auxiliary_regression_weight=auxiliary_regression_weight,
     )
 
-    best_state: dict[str, torch.Tensor] | None = None
-    best_val = float("inf")
-    for epoch in range(1, epochs + 1):
-        train_loss = _run_epoch(
+        best_state: dict[str, torch.Tensor] | None = None
+        best_val = float("inf")
+        for epoch in range(1, epochs + 1):
+            train_loss = _run_epoch(
             model, train_loader, optimizer=optimizer, device=device, criterion=criterion
         )
-        val_loss = _run_epoch(
+            val_loss = _run_epoch(
             model, val_loader, optimizer=None, device=device, criterion=criterion
         )
-        print(f"Epoch {epoch:02d}/{epochs} | train_loss={train_loss:.4f} | val_loss={val_loss:.4f}")
-        if val_loss < best_val:
-            best_val = val_loss
-            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            history["train_loss"].append(train_loss)
+            history["val_loss"].append(val_loss)
+            log_epoch_metrics({"train_loss": train_loss, "val_loss": val_loss}, epoch)
+            print(f"Epoch {epoch:02d}/{epochs} | train_loss={train_loss:.4f} | val_loss={val_loss:.4f}")
+            if val_loss < best_val:
+                best_val = val_loss
+                best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
 
-    if best_state is not None:
-        model.load_state_dict(best_state)
+        if best_state is not None:
+            model.load_state_dict(best_state)
 
-    if save_path:
+        if save_path:
         ckpt_parent = os.path.dirname(os.path.abspath(save_path))
         if ckpt_parent:
             os.makedirs(ckpt_parent, exist_ok=True)
@@ -757,7 +807,7 @@ def train_and_evaluate_text_model(
         target_mean=target_mean,
         target_std=target_std,
     )
-    metrics = _metrics(
+        metrics = _metrics(
         y_test,
         y_pred,
         star_prob,
@@ -767,21 +817,33 @@ def train_and_evaluate_text_model(
         starter_prob=starter_prob,
         starter_true=starter_true,
     )
-    print("\n" + "=" * 40)
-    print("Text Model Test Metrics")
-    print("=" * 40)
-    print(f"R2   = {metrics['r2']:.4f}")
-    print(f"RMSE = {metrics['rmse']:.4f}")
-    print(f"MAE  = {metrics['mae']:.4f}")
+        mlflow.log_metrics(metrics)
+        mlflow.log_metric("best_val_loss", float(best_val))
+        mlflow.pytorch.log_model(model, artifact_path="model")
+
+        print("\n" + "=" * 40)
+        print("Text Model Test Metrics")
+        print("=" * 40)
+        print(f"R2   = {metrics['r2']:.4f}")
+        print(f"RMSE = {metrics['rmse']:.4f}")
+        print(f"MAE  = {metrics['mae']:.4f}")
     print(f"is_star         | AUC={metrics['star_auc']:.4f} AP={metrics['star_ap']:.4f} ACC={metrics['star_acc']:.4f}")
     print(f"survived_3yrs   | AUC={metrics['survived_auc']:.4f} AP={metrics['survived_ap']:.4f} ACC={metrics['survived_acc']:.4f}")
     print(f"became_starter  | AUC={metrics['starter_auc']:.4f} AP={metrics['starter_ap']:.4f} ACC={metrics['starter_acc']:.4f}")
 
-    _plot_text_results(y_test, y_pred)
+        _plot_text_results(y_test, y_pred, history, plot_dir=mlflow_ctx.plot_dir)
     return model, metrics
 
 
-def _plot_text_results(y_true: np.ndarray, y_pred: np.ndarray) -> None:
+def _plot_text_results(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    history: dict[str, list[float]],
+    plot_dir: str,
+) -> None:
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
+
     plt.figure(figsize=(6, 5))
     plt.scatter(y_true, y_pred, alpha=0.6, s=30, edgecolors="none")
     upperLim = max(abs(float(np.max(y_true))), abs(float(np.max(y_pred)))) + 1
@@ -794,9 +856,26 @@ def _plot_text_results(y_true: np.ndarray, y_pred: np.ndarray) -> None:
     plt.xlim(bottomLim, upperLim)
     plt.ylim(bottomLim, upperLim)
     plt.tight_layout()
-    out_path = os.path.join(PROJECT_ROOT, "src", "models", "text_model_results.png")
+    out_path = plot_path / "text_model_results.png"
     plt.savefig(out_path, dpi=150)
     print(f"\nPlot saved to {out_path}")
+    if mlflow.active_run() is not None:
+        mlflow.log_artifact(str(out_path), artifact_path="plots")
+
+    plt.figure(figsize=(7, 4))
+    epochs = range(1, len(history["train_loss"]) + 1)
+    plt.plot(epochs, history["train_loss"], label="train_loss", linewidth=2)
+    plt.plot(epochs, history["val_loss"], label="val_loss", linewidth=2)
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Text Model Loss Curves")
+    plt.legend()
+    plt.tight_layout()
+    loss_out_path = plot_path / "text_model_loss_curves.png"
+    plt.savefig(loss_out_path, dpi=150)
+    print(f"Plot saved to {loss_out_path}")
+    if mlflow.active_run() is not None:
+        mlflow.log_artifact(str(loss_out_path), artifact_path="plots")
 
 
 if __name__ == "__main__":
