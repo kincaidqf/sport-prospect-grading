@@ -333,8 +333,6 @@ Class balancing (`sample_weight`) is applied in the final artifact fit but not d
 
 **Draft class normalization** — stats should ideally be normalized within each draft class to account for era effects and conference inflation. A player from 2015 and a player from 2023 are measured on different scales. Z-scoring within draft year would remove this noise.
 
-**Multi-season trajectory features** — the model only uses the final NCAA season. Year-over-year improvement rate (sophomore jump, junior consistency) is a well-known scouting signal. If the data supports it, adding delta features (e.g., `pts_pg_delta`) could add predictive power.
-
 **Ordinal regression for `prospect_tier`** — since Bust < Bench < Starter < Star is a natural ordering, proportional-odds ordinal regression (e.g., `mord` library) is more principled than treating this as nominal 4-class. Multinomial logistic regression ignores the rank structure.
 
 **Calibrated probabilities** — no probability calibration is applied after training. For prospect grading, probability output matters (e.g., "40% starter probability"). Adding isotonic regression or Platt scaling as a post-processing step would improve probability reliability.

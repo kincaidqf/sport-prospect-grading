@@ -9,6 +9,7 @@ import os
 
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
@@ -463,6 +464,44 @@ def load_data(composite_cfg=None):
     return df
 
 
+# ── Position-relative input normalizer ─────────────────────────────────────────
+
+class PositionGroupNormalizer(BaseEstimator, TransformerMixin):
+    """Normalize numeric features relative to position group (Guard/Forward/Center).
+
+    Expects DataFrame input containing `pos_col`.  Replaces each feature with
+    its within-group z-score.  NaN values are ignored when computing stats and
+    remain NaN so the downstream SimpleImputer can fill them.  Rows whose
+    position is not seen during fit fall back to global stats.
+    """
+
+    def __init__(self, feature_cols: list[str], pos_col: str = "pos_group"):
+        self.feature_cols = list(feature_cols)
+        self.pos_col = pos_col
+
+    def fit(self, X, y=None):
+        df = X if isinstance(X, pd.DataFrame) else pd.DataFrame(X)
+        feat = df[self.feature_cols].astype(float)
+        self.global_mean_ = feat.mean()
+        self.global_std_  = feat.std().clip(lower=1e-8)
+        self.group_stats_: dict = {}
+        for group, subset in df.groupby(self.pos_col):
+            s = subset[self.feature_cols].astype(float)
+            mean = s.mean()
+            std  = s.std().clip(lower=1e-8).fillna(self.global_std_)
+            self.group_stats_[group] = (mean, std)
+        return self
+
+    def transform(self, X):
+        df = X.copy() if isinstance(X, pd.DataFrame) else pd.DataFrame(X).copy()
+        df[self.feature_cols] = df[self.feature_cols].astype(float)
+        for group in df[self.pos_col].unique():
+            mask = df[self.pos_col] == group
+            mean, std = self.group_stats_.get(group, (self.global_mean_, self.global_std_))
+            df.loc[mask, self.feature_cols] = (df.loc[mask, self.feature_cols] - mean) / std
+        return df
+
+
 # ── Feature matrix ─────────────────────────────────────────────────────────────
 
 def build_feature_matrix(
@@ -472,7 +511,19 @@ def build_feature_matrix(
     prospect_context_mode: str = PROSPECT_CONTEXT_MODE,
     use_engineered_features: bool = False,
     use_pos_categorical: bool = False,
+    input_normalization_mode: str = "global",
 ):
+    """Build a sklearn preprocessor and column lists for model training.
+
+    Returns
+    -------
+    preprocessor, numeric_cols, categorical_cols, ordinal_cols, passthrough_cols
+
+    ``passthrough_cols`` contains any columns the pipeline needs that are not
+    in the three named lists (e.g. ``pos_group`` for position-relative mode).
+    Callers should include it in ``feature_cols`` so the columns are present
+    in X when ``pipeline.fit`` / ``pipeline.predict`` is called.
+    """
     _exclude     = frozenset(exclude_features or [])
     numeric_cols = [f for f in NUMERIC_FEATURES + [HEIGHT_DEV_FEATURE, TEAM_DIFFICULTY_FEATURE] if f not in _exclude]
     if use_engineered_features:
@@ -485,12 +536,14 @@ def build_feature_matrix(
     # Cl (ordinal class standing) is included only in individual/both modes
     ordinal_cols = [CLASS_FEATURE] if prospect_context_mode in ("individual", "both") else []
 
-    transformers = [
-        ("num", Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler",  StandardScaler()),
-        ]), numeric_cols),
-    ]
+    use_pos_relative = input_normalization_mode == "position_relative"
+
+    num_pipeline = Pipeline([
+        ("imputer", SimpleImputer(strategy="median")),
+        *([("scaler", StandardScaler())] if not use_pos_relative else []),
+    ])
+
+    transformers = [("num", num_pipeline, numeric_cols)]
     if categorical_cols:
         transformers.append(("cat", Pipeline([
             ("imputer", SimpleImputer(strategy="most_frequent")),
@@ -502,6 +555,14 @@ def build_feature_matrix(
             ("ordinal",  OrdinalEncoder(categories=CLASS_ORDER, handle_unknown="use_encoded_value", unknown_value=-1)),
             ("scaler",   StandardScaler()),
         ]), ordinal_cols))
-    preprocessor = ColumnTransformer(transformers)
+    column_transformer = ColumnTransformer(transformers)
 
-    return preprocessor, numeric_cols, categorical_cols, ordinal_cols
+    if use_pos_relative:
+        pos_norm = PositionGroupNormalizer(feature_cols=numeric_cols, pos_col="pos_group")
+        preprocessor = Pipeline([("pos_norm", pos_norm), ("ct", column_transformer)])
+        passthrough_cols = ["pos_group"]
+    else:
+        preprocessor = column_transformer
+        passthrough_cols = []
+
+    return preprocessor, numeric_cols, categorical_cols, ordinal_cols, passthrough_cols

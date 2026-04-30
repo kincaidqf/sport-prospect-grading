@@ -87,21 +87,23 @@ def run_inference_on_merged_data(
     output_path: str | Path = "outputs/stat_proba.csv",
     composite_cfg: dict | None = None,
     prospect_context_mode: str = PROSPECT_CONTEXT_MODE,
+    input_normalization_mode: str = "global",
 ) -> pd.DataFrame:
     """Load merged NCAA+NBA data, run inference, and export probabilities.
 
     Convenience wrapper for multimodal experiments.  No draft_pick in output.
     """
     df = load_data(composite_cfg=composite_cfg)
-    _, numeric_cols, categorical_cols, ordinal_cols = build_feature_matrix(
+    _, numeric_cols, categorical_cols, ordinal_cols, passthrough_cols = build_feature_matrix(
         df,
         use_draft_pick=False,
         exclude_features=CLASSIFICATION_EXCLUDED_NUMERIC,
         prospect_context_mode=prospect_context_mode,
         use_engineered_features=True,
         use_pos_categorical=True,
+        input_normalization_mode=input_normalization_mode,
     )
-    feature_cols = numeric_cols + categorical_cols + ordinal_cols
+    feature_cols = numeric_cols + categorical_cols + ordinal_cols + passthrough_cols
     return export_stats_embeddings_or_proba(df, pipeline, feature_cols, output_path)
 
 

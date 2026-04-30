@@ -60,20 +60,22 @@ def train_and_evaluate(
     prospect_context_mode=PROSPECT_CONTEXT_MODE,
     use_engineered_features=False,
     use_pos_categorical=False,
+    input_normalization_mode="global",
 ):
     if target_mode not in REGRESSION_TARGETS:
         raise ValueError(
             f"regression_model only supports {sorted(REGRESSION_TARGETS)}; got {target_mode!r}"
         )
 
-    preprocessor, numeric_cols, categorical_cols, ordinal_cols = build_feature_matrix(
+    preprocessor, numeric_cols, categorical_cols, ordinal_cols, passthrough_cols = build_feature_matrix(
         df,
         use_draft_pick=use_draft_pick,
         prospect_context_mode=prospect_context_mode,
         use_engineered_features=use_engineered_features,
         use_pos_categorical=use_pos_categorical,
+        input_normalization_mode=input_normalization_mode,
     )
-    feature_cols = numeric_cols + categorical_cols + ordinal_cols
+    feature_cols = numeric_cols + categorical_cols + ordinal_cols + passthrough_cols
     col = TARGET_COL[target_mode]
     train, test = train_test_split(df, test_size=TEST_SIZE, random_state=RANDOM_STATE)
 
@@ -368,14 +370,15 @@ def _plot_regression(results, y_test, target_mode, plot_dir):
 
 
 def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=None, run_name=None, tracking_uri=None):
-    model_cfg               = (cfg or {}).get("model", {}) or {}
-    composite_cfg           = model_cfg.get("composite_score") or {}
-    reg_cfg                 = model_cfg.get("regression", {}) or {}
-    xgb_cfg                 = reg_cfg.get("xgboost") or {}
-    target_score_mode       = (model_cfg.get("nba_role_score") or {}).get("target_score_mode", "global")
-    prospect_context_mode   = model_cfg.get("prospect_context_mode", PROSPECT_CONTEXT_MODE)
-    use_engineered_features = bool(reg_cfg.get("use_engineered_features", False))
-    use_pos_categorical     = bool(reg_cfg.get("use_pos_categorical", False))
+    model_cfg                = (cfg or {}).get("model", {}) or {}
+    composite_cfg            = model_cfg.get("composite_score") or {}
+    reg_cfg                  = model_cfg.get("regression", {}) or {}
+    xgb_cfg                  = reg_cfg.get("xgboost") or {}
+    target_score_mode        = (model_cfg.get("nba_role_score") or {}).get("target_score_mode", "global")
+    prospect_context_mode    = model_cfg.get("prospect_context_mode", PROSPECT_CONTEXT_MODE)
+    use_engineered_features  = bool(reg_cfg.get("use_engineered_features", False))
+    use_pos_categorical      = bool(reg_cfg.get("use_pos_categorical", False))
+    input_normalization_mode = model_cfg.get("input_normalization_mode", "global")
     df = load_data(composite_cfg=composite_cfg) if df is None else df
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
@@ -393,6 +396,7 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
                 "model_family": "regression",
                 "target": target_mode,
                 "target_score_mode": target_score_mode,
+                "input_normalization_mode": input_normalization_mode,
                 "use_draft_pick": use_draft_pick,
                 "use_engineered_features": use_engineered_features,
                 "use_pos_categorical": use_pos_categorical,
@@ -417,6 +421,7 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
             prospect_context_mode=prospect_context_mode,
             use_engineered_features=use_engineered_features,
             use_pos_categorical=use_pos_categorical,
+            input_normalization_mode=input_normalization_mode,
         )
         log_candidate_summary(results, task="regression")
         plot_results(results, y_test, col_info, target_mode=target_mode, plot_dir=mlflow_ctx.plot_dir)

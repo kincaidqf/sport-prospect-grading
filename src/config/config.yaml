@@ -4,6 +4,7 @@ defaults:
 model:
   type: regression          # regression | classification | text
   prospect_context_mode: individual  # individual | composite | both | none
+  input_normalization_mode: global   # global | position_relative
   nba_role_score:
     target_score_mode: global       # global | position_relative
     tier_thresholds: [-0.5, 0.5, 1.5]
@@ -26,7 +27,7 @@ model:
     target_mode: nba_role_zscore  # plus_minus | composite_score | nba_role_zscore
     use_draft_pick: false        # include draft pick as a feature (leaks scout judgment)
     use_engineered_features: false  # add ts_pct, efg_pct, usage_proxy, ast_to, etc.
-    use_pos_categorical: false      # one-hot encode position (Guard/Forward/Center)
+    use_pos_categorical: true      # one-hot encode position (Guard/Forward/Center)
     alpha_min: 1e-4         # lasso/ridge alpha search range
     alpha_max: 1e2
     alpha_steps: 100
