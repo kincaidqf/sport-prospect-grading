@@ -84,6 +84,8 @@ def train_and_evaluate(
     xgb_cfg=None,
     clf_cfg=None,
     prospect_context_mode=PROSPECT_CONTEXT_MODE,
+    use_engineered_features=False,
+    use_pos_categorical=False,
 ):
     if target_mode not in CLASSIFICATION_TARGETS:
         raise ValueError(
@@ -100,8 +102,8 @@ def train_and_evaluate(
         use_draft_pick=use_draft_pick,
         exclude_features=CLASSIFICATION_EXCLUDED_NUMERIC,
         prospect_context_mode=prospect_context_mode,
-        use_engineered_features=False,
-        use_pos_categorical=False,
+        use_engineered_features=use_engineered_features,
+        use_pos_categorical=use_pos_categorical,
     )
     feature_cols = numeric_cols + categorical_cols + ordinal_cols
     col = TARGET_COL[target_mode]
@@ -611,12 +613,14 @@ def _plot_classification(results, y_test, target_mode, plot_dir):
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=None, run_name=None, tracking_uri=None):
-    model_cfg             = (cfg or {}).get("model", {}) or {}
-    composite_cfg         = model_cfg.get("composite_score") or {}
-    clf_cfg               = model_cfg.get("classification", {}) or {}
-    xgb_cfg               = clf_cfg.get("xgboost") or {}
-    prospect_context_mode = model_cfg.get("prospect_context_mode", PROSPECT_CONTEXT_MODE)
-    target_score_mode     = (model_cfg.get("nba_role_score") or {}).get("target_score_mode", "global")
+    model_cfg               = (cfg or {}).get("model", {}) or {}
+    composite_cfg           = model_cfg.get("composite_score") or {}
+    clf_cfg                 = model_cfg.get("classification", {}) or {}
+    xgb_cfg                 = clf_cfg.get("xgboost") or {}
+    prospect_context_mode   = model_cfg.get("prospect_context_mode", PROSPECT_CONTEXT_MODE)
+    target_score_mode       = (model_cfg.get("nba_role_score") or {}).get("target_score_mode", "global")
+    use_engineered_features = bool(clf_cfg.get("use_engineered_features", False))
+    use_pos_categorical     = bool(clf_cfg.get("use_pos_categorical", False))
     df = load_data(composite_cfg=composite_cfg) if df is None else df
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
@@ -634,6 +638,8 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
             "target": target_mode,
             "target_score_mode": target_score_mode,
             "use_draft_pick": use_draft_pick,
+            "use_engineered_features": use_engineered_features,
+            "use_pos_categorical": use_pos_categorical,
             "eval_mode": clf_cfg.get("eval_mode", "random"),
             "class_weight": str(clf_cfg.get("class_weight")),
             "threshold_tuning": clf_cfg.get("threshold_tuning", False),
@@ -655,6 +661,8 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
             xgb_cfg=xgb_cfg,
             clf_cfg=clf_cfg,
             prospect_context_mode=prospect_context_mode,
+            use_engineered_features=use_engineered_features,
+            use_pos_categorical=use_pos_categorical,
         )
         log_candidate_summary(results, task="classification", target_mode=target_mode)
         plot_results(results, y_test, col_info, target_mode=target_mode, plot_dir=mlflow_ctx.plot_dir)

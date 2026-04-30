@@ -25,6 +25,8 @@ model:
   regression:
     target_mode: nba_role_zscore  # plus_minus | composite_score | nba_role_zscore
     use_draft_pick: false        # include draft pick as a feature (leaks scout judgment)
+    use_engineered_features: false  # add ts_pct, efg_pct, usage_proxy, ast_to, etc.
+    use_pos_categorical: false      # one-hot encode position (Guard/Forward/Center)
     alpha_min: 1e-4         # lasso/ridge alpha search range
     alpha_max: 1e2
     alpha_steps: 100
@@ -46,6 +48,8 @@ model:
   classification:
     target_mode: prospect_tier  # became_starter | prospect_tier
     use_draft_pick: false       # include draft pick as a feature (leaks scout judgment)
+    use_engineered_features: false  # add ts_pct, efg_pct, usage_proxy, ast_to, etc.
+    use_pos_categorical: false      # one-hot encode position (Guard/Forward/Center)
     eval_mode: random           # random | chronological | repeated_cv
     class_weight: balanced      # null | balanced
     threshold_tuning: false     # true | false — tune per-class prob offsets on val set
