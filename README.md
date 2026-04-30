@@ -117,6 +117,12 @@ uv run python -c "from src.models.text_model import train_and_evaluate_text_mode
 uv run python -m src.models.interpret_text --checkpoint outputs/checkpoints/text_model.pt
 ```
 
+Fast run (smaller/faster occlusion):
+
+```bash
+uv run python -m src.models.interpret_text --checkpoint outputs/checkpoints/text_model.pt --n-occlusion 20 --max-variants-per-report 40
+```
+
 Use `--retrain --checkpoint-out ...` to train and interpret in one step. Outputs land in `outputs/interpretability/`.
 
 ### Jupyter Notebook

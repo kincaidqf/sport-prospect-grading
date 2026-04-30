@@ -93,7 +93,7 @@ def score_texts(
     target_mean: float,
     target_std: float,
     max_length: int = 256,
-    batch_size: int = 16,
+    batch_size: int = 32,
 ) -> dict[str, np.ndarray]:
     """Return per-head scores: VORP in original units; classifiers as sigmoid probabilities."""
     if not texts:
@@ -298,7 +298,8 @@ def run_occlusion(
     texts: list[str],
     out_dir: str,
     min_reports: int = 10,
-    batch_size: int = 16,
+    batch_size: int = 32,
+    max_variants_per_report: int = 80,
 ) -> dict[str, pd.DataFrame]:
     """Aggregate occlusion deltas per n-gram per head."""
     tokenizer = model.text_encoder.tokenizer
@@ -334,6 +335,11 @@ def run_occlusion(
 
         if not variants:
             continue
+        if len(variants) > max_variants_per_report:
+            step = max(1, len(variants) // max_variants_per_report)
+            selected = list(range(0, len(variants), step))[:max_variants_per_report]
+            variants = [variants[i] for i in selected]
+            keys = [keys[i] for i in selected]
 
         orig_scores = score_texts(
             model,
@@ -656,9 +662,9 @@ def agreement_terms(
         neg_sets.append(set(_normalize_term(x) for x in o.nsmallest(top_k, "mean_delta")["ngram"]))
 
     if not logodds_df.empty:
-        l = logodds_df  # no head column
-        pos_sets.append(set(_normalize_term(x) for x in l.nlargest(top_k, "log_odds")["ngram"]))
-        neg_sets.append(set(_normalize_term(x) for x in l.nsmallest(top_k, "log_odds")["ngram"]))
+        logodds_sub = logodds_df  # no head column
+        pos_sets.append(set(_normalize_term(x) for x in logodds_sub.nlargest(top_k, "log_odds")["ngram"]))
+        neg_sets.append(set(_normalize_term(x) for x in logodds_sub.nsmallest(top_k, "log_odds")["ngram"]))
 
     def pair_agreement(sets: list[set[str]]) -> list[str]:
         if len(sets) < 2:
@@ -809,7 +815,13 @@ def parse_args() -> argparse.Namespace:
         help="When --retrain, save checkpoint here.",
     )
     p.add_argument("--out-dir", default=DEFAULT_OUT)
-    p.add_argument("--n-occlusion", type=int, default=200)
+    p.add_argument("--n-occlusion", type=int, default=40)
+    p.add_argument(
+        "--max-variants-per-report",
+        type=int,
+        default=80,
+        help="Cap masked 1/2-gram variants evaluated per report during occlusion.",
+    )
     p.add_argument("--seed", type=int, default=42)
     return p.parse_args()
 
@@ -854,7 +866,14 @@ def main() -> None:
     probe_tables = run_probes(model, device, meta, out_dir)
 
     occ_sample = pick_occlusion_sample(df, args.n_occlusion, args.seed)
-    occlusion_frames = run_occlusion(model, device, meta, occ_sample, out_dir)
+    occlusion_frames = run_occlusion(
+        model,
+        device,
+        meta,
+        occ_sample,
+        out_dir,
+        max_variants_per_report=args.max_variants_per_report,
+    )
 
     logodds_tables = run_log_odds(texts_full, preds_by_head, name_tokens, stop, out_dir)
 
