@@ -244,7 +244,7 @@ def _run_repeated_cv(
             ("preprocessor", clone(preprocessor)),
             ("clf", LogisticRegressionCV(
                 Cs=np.logspace(-3, 2, 10), cv=cv_folds, penalty="l1",
-                solver="saga", max_iter=5000, random_state=RANDOM_STATE,
+                solver="saga", max_iter=5000, tol=1e-3, random_state=RANDOM_STATE,
                 n_jobs=1, class_weight=class_weight,
                 scoring="f1_macro" if is_multiclass else "roc_auc",
             )),
@@ -253,7 +253,7 @@ def _run_repeated_cv(
             ("preprocessor", clone(preprocessor)),
             ("clf", LogisticRegressionCV(
                 Cs=np.logspace(-3, 2, 10), cv=cv_folds, penalty="l2",
-                solver="saga", max_iter=5000, random_state=RANDOM_STATE,
+                solver="lbfgs", max_iter=1000, random_state=RANDOM_STATE,
                 n_jobs=1, class_weight=class_weight,
                 scoring="f1_macro" if is_multiclass else "roc_auc",
             )),
@@ -368,8 +368,9 @@ def _run_classification(
                 Cs=cs,
                 cv=linear_cv_folds,
                 penalty=penalty,
-                solver="saga",
-                max_iter=5000,
+                solver="saga" if penalty == "l1" else "lbfgs",
+                max_iter=5000 if penalty == "l1" else 1000,
+                tol=1e-3 if penalty == "l1" else 1e-4,
                 random_state=RANDOM_STATE,
                 n_jobs=1,  # keep single-process; -1 causes macOS OpenMP conflicts with XGBoost
                 class_weight=class_weight,
