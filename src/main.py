@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--config", default="src/config/config.yaml")
     p.add_argument(
         "--model",
-        choices=["regression", "classification", "text", "multimodal"],
+        choices=["regression", "classification", "text"],
         default=None,
         help="Override model.type from config",
     )
@@ -125,9 +125,6 @@ def main() -> None:
             run_name=args.run_name,
             tracking_uri=args.tracking_uri,
         )
-    elif model_type == "multimodal":
-        # TODO: from src.training.run_multimodal import run; run(cfg, device)
-        raise NotImplementedError("multimodal pipeline not yet implemented")
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 

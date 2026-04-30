@@ -37,15 +37,16 @@ TARGET_COL = {
 }
 
 NUMERIC_FEATURES = [
-    # core per-game (computed from totals)
+    # core per-game (given columns primary; backfill from totals/G if missing)
     "pts_pg", "reb_pg", "ast_pg", "blk_pg", "stl_pg",
+    # computed per-game (no given equivalents)
     "fgm_pg", "fga_pg", "ft_pg", "fta_pg", "fg3_pg",
-    # percentages (computed from totals)
+    # percentages (given columns primary; backfill from totals if missing)
     "fg_pct", "ft_pct",
     # derived efficiency
     "pts_per_fga", "ft_rate", "fg3_share",
     # other
-    "G", "shoots_3s",
+    "G",
 ]
 
 # Additional engineered features available for classification only.
@@ -59,13 +60,15 @@ CLASSIFICATION_ENGINEERED_NUMERIC: list[str] = [
     "usage_proxy",  # (FGA + 0.44*FTA + TO) / G
     "efg_pct",      # effective field goal %
     "ts_pct",       # true shooting %
-    "height_in",    # height in inches
+    # height_in excluded — height_dev (position-relative deviation) is used instead
 ]
 
 # Raw counting-stat equivalents excluded from classification (per user spec:
 # PTS, FGA, 3PG, REB, AST, BLKS, ST — Ratio and MP are not in the model).
+# height_in excluded because height_dev (position-relative deviation) subsumes it.
 CLASSIFICATION_EXCLUDED_NUMERIC: frozenset[str] = frozenset({
-    "G"
+    "G",
+    "height_in",
 })
 
 DRAFT_PICK_FEATURE      = "draft_pick"
@@ -408,34 +411,28 @@ def load_data(composite_cfg=None):
     ]
 
     g = df["G"].replace(0, np.nan)
-    df["pts_pg"] = df["PTS"]  / g
-    df["reb_pg"] = df["REB"]  / g
-    df["ast_pg"] = df["AST"]  / g
-    df["blk_pg"] = df["BLKS"] / g
-    df["stl_pg"] = df["ST"]   / g
+
+    # Given per-game columns are primary; backfill from totals/G only if missing
+    df["pts_pg"] = df["PPG"].fillna(df["PTS"]  / g)
+    df["reb_pg"] = df["RPG"].fillna(df["REB"]  / g)
+    df["ast_pg"] = df["APG"].fillna(df["AST"]  / g)
+    df["blk_pg"] = df["BKPG"].fillna(df["BLKS"] / g)
+    df["stl_pg"] = df["STPG"].fillna(df["ST"]   / g)
+
+    # Computed per-game (no given equivalents in source data)
     df["fgm_pg"] = df["FGM"]  / g
     df["fga_pg"] = df["FGA"]  / g
     df["ft_pg"]  = df["FT"]   / g
     df["fta_pg"] = df["FTA"]  / g
     df["fg3_pg"] = df["3FG"]  / g
 
-    _backfill = [
-        ("pts_pg", "PPG"), ("reb_pg", "RPG"), ("ast_pg", "APG"),
-        ("blk_pg", "BKPG"), ("stl_pg", "STPG"),
-    ]
-    for computed, original in _backfill:
-        df[computed] = df[computed].fillna(df[original])
-
-    df["fg_pct"] = (df["FGM"] / df["FGA"].replace(0, np.nan)) * 100
-    df["fg_pct"] = df["fg_pct"].fillna(df["FG%"])
-
-    df["ft_pct"] = (df["FT"] / df["FTA"].replace(0, np.nan)) * 100
-    df["ft_pct"] = df["ft_pct"].fillna(df["FT%"])
+    # Given percentage columns are primary; backfill from totals if missing
+    df["fg_pct"] = df["FG%"].fillna((df["FGM"] / df["FGA"].replace(0, np.nan)) * 100)
+    df["ft_pct"] = df["FT%"].fillna((df["FT"]  / df["FTA"].replace(0, np.nan)) * 100)
 
     df["pts_per_fga"] = df["PTS"] / df["FGA"].replace(0, np.nan)
     df["ft_rate"]     = df["FTA"] / df["FGA"].replace(0, np.nan)
     df["fg3_share"]   = df["3FG"].fillna(0) / df["FGM"].replace(0, np.nan)
-    df["shoots_3s"]   = (df["3FG"].fillna(0) > 0).astype(float)
 
     # ── Engineered features (classification-specific) ──────────────────────────
     _to = pd.to_numeric(df["TO"], errors="coerce")

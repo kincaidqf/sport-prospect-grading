@@ -100,8 +100,8 @@ def train_and_evaluate(
         use_draft_pick=use_draft_pick,
         exclude_features=CLASSIFICATION_EXCLUDED_NUMERIC,
         prospect_context_mode=prospect_context_mode,
-        use_engineered_features=True,
-        use_pos_categorical=True,
+        use_engineered_features=False,
+        use_pos_categorical=False,
     )
     feature_cols = numeric_cols + categorical_cols + ordinal_cols
     col = TARGET_COL[target_mode]
@@ -215,6 +215,26 @@ def _run_repeated_cv(
     cv_folds = cfg.get("cv_folds", 3)
     n_jobs = cfg.get("n_jobs", 1)
 
+    from xgboost import XGBClassifier  # noqa: PLC0415
+    xgb_extra = (
+        {"objective": "multi:softprob", "num_class": len(TIER_NAMES), "eval_metric": "mlogloss"}
+        if is_multiclass
+        else {"objective": "binary:logistic", "eval_metric": "logloss"}
+    )
+    # XGBoost uses fixed params (first value from each grid) — cross_validate
+    # doesn't support nested grid search; use random/chronological for full tuning.
+    xgb_fixed = {
+        "n_estimators":     cfg.get("n_estimators",     [200])[0],
+        "max_depth":        cfg.get("max_depth",         [3])[0],
+        "learning_rate":    cfg.get("learning_rate",     [0.05])[0],
+        "subsample":        cfg.get("subsample",         [0.7])[0],
+        "colsample_bytree": cfg.get("colsample_bytree",  [1.0])[0],
+        "min_child_weight": cfg.get("min_child_weight",  [3])[0],
+        "reg_alpha":        cfg.get("reg_alpha",         [0])[0],
+        "reg_lambda":       cfg.get("reg_lambda",        [1])[0],
+        "gamma":            cfg.get("gamma",             [0])[0],
+    }
+
     model_specs = [
         ("LogisticL1", Pipeline([
             ("preprocessor", clone(preprocessor)),
@@ -234,14 +254,31 @@ def _run_repeated_cv(
                 scoring="f1_macro" if is_multiclass else "roc_auc",
             )),
         ])),
+        ("XGBoost", Pipeline([
+            ("preprocessor", clone(preprocessor)),
+            ("xgb", XGBClassifier(
+                random_state=RANDOM_STATE, n_jobs=n_jobs, verbosity=0,
+                **xgb_extra, **xgb_fixed,
+            )),
+        ])),
     ]
+
+    sw_all = compute_sample_weight("balanced", y_all) if class_weight == "balanced" else None
+
     for name, pipe in model_specs:
+        is_xgb = name == "XGBoost"
         run_manager = (
             managed_run(mlflow_ctx, run_name=f"{mlflow_ctx.parent_run_name}__{name.lower()}_cv", nested=True, tags={"estimator": name.lower(), "eval_mode": "repeated_cv"})
             if mlflow_ctx else mlflow.start_run(run_name=f"{name}_cv_{target_mode}")
         )
         with run_manager:
-            cv_res = cross_validate(pipe, X_all, y_all, cv=cv, scoring=scoring, n_jobs=n_jobs, return_train_score=False)
+            # Note: XGBoost class balancing (sample_weight) is NOT applied in CV folds —
+            # cross_validate doesn't subset fit_params arrays per fold. Balancing is
+            # applied in the final artifact fit below.
+            cv_res = cross_validate(
+                pipe, X_all, y_all, cv=cv, scoring=scoring,
+                n_jobs=n_jobs, return_train_score=False,
+            )
             mean_f1 = float(np.mean(cv_res["test_f1_macro"]))
             std_f1  = float(np.std(cv_res["test_f1_macro"]))
             mean_ba = float(np.mean(cv_res["test_balanced_accuracy"]))
@@ -260,7 +297,10 @@ def _run_repeated_cv(
             })
             print(f"  {name}: CV F1-macro = {mean_f1:.4f} ± {std_f1:.4f}  |  Bal.Acc = {mean_ba:.4f}")
             # Fit final model on full data for artifact logging
-            pipe.fit(X_all, y_all)
+            if is_xgb and sw_all is not None:
+                pipe.fit(X_all, y_all, xgb__sample_weight=sw_all)
+            else:
+                pipe.fit(X_all, y_all)
             mlflow.sklearn.log_model(pipe, artifact_path=name.lower())
             results[name] = {
                 "pipe": pipe,
@@ -273,8 +313,8 @@ def _run_repeated_cv(
                 "cv_mean_f1_macro": mean_f1,
                 "cv_std_f1_macro": std_f1,
                 "C": None,
-                "importance_kind": "coef" if "Logistic" in name else "xgb",
-                "estimator_step": "clf" if "Logistic" in name else "etc",
+                "importance_kind": "xgb" if is_xgb else "coef",
+                "estimator_step": "xgb" if is_xgb else "clf",
             }
 
 
@@ -622,4 +662,13 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
 
 
 if __name__ == "__main__":
-    run()
+    import yaml
+    _cfg_path = os.path.join(PROJECT_ROOT, "src", "config", "config.yaml")
+    with open(_cfg_path) as _f:
+        _cfg = yaml.safe_load(_f)
+    _clf_cfg = (_cfg.get("model", {}) or {}).get("classification", {}) or {}
+    run(
+        target_mode=_clf_cfg.get("target_mode", TARGET_MODE),
+        use_draft_pick=_clf_cfg.get("use_draft_pick", USE_DRAFT_PICK),
+        cfg=_cfg,
+    )

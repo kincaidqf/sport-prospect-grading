@@ -16,6 +16,7 @@ from xgboost import XGBRegressor
 
 from src.data.loader import (
     PROJECT_ROOT,
+    PROSPECT_CONTEXT_MODE,
     RANDOM_STATE,
     TARGET_COL,
     TEST_SIZE,
@@ -49,7 +50,15 @@ USE_DRAFT_PICK = False
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
 
 
-def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, mlflow_ctx=None, xgb_cfg=None):
+def train_and_evaluate(
+    df,
+    target_mode=TARGET_MODE,
+    use_draft_pick=USE_DRAFT_PICK,
+    mlflow_ctx=None,
+    xgb_cfg=None,
+    reg_cfg=None,
+    prospect_context_mode=PROSPECT_CONTEXT_MODE,
+):
     if target_mode not in REGRESSION_TARGETS:
         raise ValueError(
             f"regression_model only supports {sorted(REGRESSION_TARGETS)}; got {target_mode!r}"
@@ -58,6 +67,7 @@ def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PIC
     preprocessor, numeric_cols, categorical_cols, ordinal_cols = build_feature_matrix(
         df,
         use_draft_pick=use_draft_pick,
+        prospect_context_mode=prospect_context_mode,
     )
     feature_cols = numeric_cols + categorical_cols + ordinal_cols
     col = TARGET_COL[target_mode]
@@ -94,6 +104,7 @@ def train_and_evaluate(df, target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PIC
         results,
         mlflow_ctx,
         xgb_cfg=xgb_cfg,
+        reg_cfg=reg_cfg,
     )
     return results, y_test, col_info
 
@@ -114,9 +125,14 @@ def _run_regression(
     results,
     mlflow_ctx,
     xgb_cfg=None,
+    reg_cfg=None,
 ):
-    alphas = np.logspace(-3, 2, 100)
-    linear_cv_folds = 5
+    _rcfg = reg_cfg or {}
+    alpha_min       = float(_rcfg.get("alpha_min",    1e-4))
+    alpha_max       = float(_rcfg.get("alpha_max",    1e2))
+    alpha_steps     = int(_rcfg.get("alpha_steps",   100))
+    linear_cv_folds = int(_rcfg.get("cv_folds",      5))
+    alphas = np.logspace(np.log10(alpha_min), np.log10(alpha_max), alpha_steps)
 
     for name, model in [
         ("Lasso", LassoCV(alphas=alphas, cv=linear_cv_folds, max_iter=10000, random_state=RANDOM_STATE)),
@@ -176,10 +192,15 @@ def _run_regression(
 
     cfg = xgb_cfg or {}
     param_grid = {
-        "xgb__n_estimators": cfg.get("n_estimators", [100, 200]),
-        "xgb__max_depth": cfg.get("max_depth", [2, 3]),
-        "xgb__learning_rate": cfg.get("learning_rate", [0.05, 0.1]),
-        "xgb__subsample": cfg.get("subsample", [0.7, 0.9]),
+        "xgb__n_estimators":     cfg.get("n_estimators",     [100, 200]),
+        "xgb__max_depth":        cfg.get("max_depth",        [2, 3]),
+        "xgb__learning_rate":    cfg.get("learning_rate",    [0.05, 0.1]),
+        "xgb__subsample":        cfg.get("subsample",        [0.7, 0.9]),
+        "xgb__colsample_bytree": cfg.get("colsample_bytree", [0.7, 1.0]),
+        "xgb__min_child_weight": cfg.get("min_child_weight", [3, 5, 10]),
+        "xgb__reg_alpha":        cfg.get("reg_alpha",        [0, 0.1, 1]),
+        "xgb__reg_lambda":       cfg.get("reg_lambda",       [1, 5, 10]),
+        "xgb__gamma":            cfg.get("gamma",            [0]),
     }
     cv_folds = cfg.get("cv_folds", 5)
     xgb_n_jobs = cfg.get("n_jobs", 1)
@@ -221,7 +242,6 @@ def _run_regression(
                             random_state=RANDOM_STATE,
                             n_jobs=xgb_n_jobs,
                             verbosity=0,
-                            min_child_weight=5,
                         ),
                     ),
                 ]
@@ -344,10 +364,12 @@ def _plot_regression(results, y_test, target_mode, plot_dir):
 
 
 def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=None, run_name=None, tracking_uri=None):
-    model_cfg          = (cfg or {}).get("model", {}) or {}
-    composite_cfg      = model_cfg.get("composite_score") or {}
-    xgb_cfg            = model_cfg.get("regression", {}).get("xgboost") or {}
-    target_score_mode  = (model_cfg.get("nba_role_score") or {}).get("target_score_mode", "global")
+    model_cfg             = (cfg or {}).get("model", {}) or {}
+    composite_cfg         = model_cfg.get("composite_score") or {}
+    reg_cfg               = model_cfg.get("regression", {}) or {}
+    xgb_cfg               = reg_cfg.get("xgboost") or {}
+    target_score_mode     = (model_cfg.get("nba_role_score") or {}).get("target_score_mode", "global")
+    prospect_context_mode = model_cfg.get("prospect_context_mode", PROSPECT_CONTEXT_MODE)
     df = load_data(composite_cfg=composite_cfg) if df is None else df
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
@@ -383,6 +405,8 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
             use_draft_pick=use_draft_pick,
             mlflow_ctx=mlflow_ctx,
             xgb_cfg=xgb_cfg,
+            reg_cfg=reg_cfg,
+            prospect_context_mode=prospect_context_mode,
         )
         log_candidate_summary(results, task="regression")
         plot_results(results, y_test, col_info, target_mode=target_mode, plot_dir=mlflow_ctx.plot_dir)
@@ -390,4 +414,13 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
 
 
 if __name__ == "__main__":
-    run()
+    import yaml
+    _cfg_path = os.path.join(PROJECT_ROOT, "src", "config", "config.yaml")
+    with open(_cfg_path) as _f:
+        _cfg = yaml.safe_load(_f)
+    _reg_cfg = (_cfg.get("model", {}) or {}).get("regression", {}) or {}
+    run(
+        target_mode=_reg_cfg.get("target_mode", TARGET_MODE),
+        use_draft_pick=_reg_cfg.get("use_draft_pick", USE_DRAFT_PICK),
+        cfg=_cfg,
+    )

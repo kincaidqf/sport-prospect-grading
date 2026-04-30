@@ -62,12 +62,6 @@ def classification_metrics(
     return out
 
 
-def ranking_metrics(y_true: np.ndarray, y_pred: np.ndarray, k: int = 10) -> dict:
-    """Return top-k precision (how many of the predicted top-k were actually top-k)."""
-    # TODO: implement precision@k and NDCG@k for draft slot evaluation
-    raise NotImplementedError
-
-
 def print_metrics(metrics: dict, prefix: str = "") -> None:
     label = f"[{prefix}] " if prefix else ""
     for k, v in metrics.items():
