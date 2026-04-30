@@ -25,7 +25,7 @@ model:
     nan_floor: -3.0        # composite score assigned to players with no NBA data
   regression:
     target_mode: nba_role_zscore  # plus_minus | composite_score | nba_role_zscore
-    use_draft_pick: false        # include draft pick as a feature (leaks scout judgment)
+    use_draft_pick: true        # include draft pick as a feature (leaks scout judgment)
     use_engineered_features: false  # add ts_pct, efg_pct, usage_proxy, ast_to, etc.
     use_pos_categorical: true      # one-hot encode position (Guard/Forward/Center)
     alpha_min: 1e-4         # lasso/ridge alpha search range
