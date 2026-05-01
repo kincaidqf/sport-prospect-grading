@@ -329,15 +329,7 @@ Class balancing (`sample_weight`) is applied in the final artifact fit but not d
 
 ### High-Impact Model Improvements
 
-**Position-relative input normalization** — currently only the *target* supports position-relative z-scoring (`global` vs `position_relative`). Applying the same normalization to input features (e.g., `reb_pg` means very different things for a center vs a guard) could substantially improve signal quality. This would mirror what's already done on the output side.
-
-**Draft class normalization** — stats should ideally be normalized within each draft class to account for era effects and conference inflation. A player from 2015 and a player from 2023 are measured on different scales. Z-scoring within draft year would remove this noise.
-
 **Ordinal regression for `prospect_tier`** — since Bust < Bench < Starter < Star is a natural ordering, proportional-odds ordinal regression (e.g., `mord` library) is more principled than treating this as nominal 4-class. Multinomial logistic regression ignores the rank structure.
-
-**Calibrated probabilities** — no probability calibration is applied after training. For prospect grading, probability output matters (e.g., "40% starter probability"). Adding isotonic regression or Platt scaling as a post-processing step would improve probability reliability.
-
-**Engineered features for regression** — `use_engineered_features` and `use_pos_categorical` now default to `false` for both models. Enabling them for regression is a one-line config change and worth benchmarking to see if the richer feature set improves R² and tier distribution accuracy.
 
 ### Target Construction Improvements
 
