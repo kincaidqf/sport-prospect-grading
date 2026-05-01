@@ -9,7 +9,7 @@ model:
     target_score_mode: global       # global | position_relative
     tier_thresholds: [-0.5, 0.5, 1.5]
     nan_floor: -3.0
-    winsor_clip: 2.5                # clip each per-stat z-score at ±this value before combining
+    winsor_clip: 3                # clip each per-stat z-score at ±this value before combining
     weights:                        # relative weights for the weighted z-score composite
       MIN: 0.30                     # floor time = role size by definition
       nba_pts: 0.25                 # primary offensive role signal
@@ -53,7 +53,7 @@ model:
     use_draft_pick: false       # include draft pick as a feature (leaks scout judgment)
     use_engineered_features: false  # add ts_pct, efg_pct, usage_proxy, ast_to, etc.
     use_pos_categorical: false      # one-hot encode position (Guard/Forward/Center)
-    eval_mode: random           # random | chronological | repeated_cv
+    eval_mode: chronological           # random | chronological | repeated_cv
     class_weight: balanced      # null | balanced
     threshold_tuning: false     # true | false — tune per-class prob offsets on val set
     selection_metric: f1_macro  # metric used to rank candidate models
@@ -81,6 +81,35 @@ model:
       n_jobs: 1
       grid_n_jobs: 1
       pre_dispatch: 1
+  multimodal:
+    target_mode: prospect_tier
+    cv_folds: 5
+    meta_model: logistic_regression
+    output_dir: outputs/multimodal
+    base_models:
+      classification: ["logistic_l2", "xgboost"]
+      regression: ["ridge", "xgboost"]
+    calibration:
+      method: sigmoid
+      calibration_size: 0.15
+    use_engineered_features:
+      classification: false
+      regression: false
+    use_pos_categorical:
+      classification: false
+      regression: true
+    xgboost:
+      pretune_oof_params: false
+      oof_params:
+        n_estimators: 200
+        max_depth: 3
+        learning_rate: 0.05
+        subsample: 0.8
+        colsample_bytree: 1.0
+        min_child_weight: 3
+        reg_alpha: 0.0
+        reg_lambda: 1.0
+        gamma: 0.0
   text:
     pretrained: "distilbert-base-uncased"
     output_dim: 128
