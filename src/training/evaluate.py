@@ -8,6 +8,7 @@ from sklearn.metrics import (
     f1_score,
     mean_absolute_error,
     mean_squared_error,
+    cohen_kappa_score,
     precision_recall_fscore_support,
     r2_score,
     roc_auc_score,
@@ -47,8 +48,9 @@ def classification_metrics(
         out["auc"] = float(roc_auc_score(y_true, y_prob, multi_class="ovr", average="macro"))
         out["f1_macro"] = float(f1_score(y_true, y_pred, average="macro", zero_division=0))
 
+        labels = list(range(len(class_names))) if class_names is not None else None
         precision, recall, fscore, _ = precision_recall_fscore_support(
-            y_true, y_pred, average=None, zero_division=0
+            y_true, y_pred, average=None, labels=labels, zero_division=0
         )
         n_classes = len(precision)
         names = (class_names or [f"class_{i}" for i in range(n_classes)])[:n_classes]
@@ -59,6 +61,34 @@ def classification_metrics(
     else:
         out["auc"] = float(roc_auc_score(y_true, y_prob))
 
+    return out
+
+
+def ordinal_classification_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    y_prob: np.ndarray,
+    class_names: list[str] | None = None,
+) -> dict:
+    """Return standard classification metrics plus ordinal-distance metrics."""
+    y_true_arr = np.asarray(y_true, dtype=float)
+    y_pred_arr = np.asarray(y_pred, dtype=float)
+    y_prob_arr = np.asarray(y_prob, dtype=float)
+
+    out = classification_metrics(y_true, y_pred, y_prob, class_names=class_names)
+
+    ordinal_error = np.abs(y_pred_arr - y_true_arr)
+    max_distance = max(y_prob_arr.shape[1] - 1, 1)
+    class_values = np.arange(y_prob_arr.shape[1], dtype=float)
+    expected_class = y_prob_arr @ class_values
+
+    out["top1_accuracy"] = out["accuracy"]
+    out["within_one_accuracy"] = float(np.mean(ordinal_error <= 1.0))
+    out["ordinal_mae"] = float(np.mean(ordinal_error))
+    out["distance_weighted_accuracy"] = float(np.mean(1.0 - (ordinal_error / max_distance)))
+    out["expected_class_mae"] = float(np.mean(np.abs(expected_class - y_true_arr)))
+    kappa = cohen_kappa_score(y_true, y_pred, weights="quadratic")
+    out["quadratic_weighted_kappa"] = float(kappa) if np.isfinite(kappa) else 0.0
     return out
 
 

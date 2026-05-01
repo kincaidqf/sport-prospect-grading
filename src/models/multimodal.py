@@ -23,11 +23,11 @@ from src.data.loader import (
     PROSPECT_CONTEXT_MODE,
     RANDOM_STATE,
     TARGET_COL,
-    TEST_SIZE,
     CLASSIFICATION_EXCLUDED_NUMERIC,
     build_feature_matrix,
     load_data,
 )
+from src.training.splits import get_chronological_split
 from src.models.classification_model import (
     CLASSIFICATION_MODEL_REGISTRY,
     train_selected_classification_models,
@@ -37,7 +37,8 @@ from src.models.regression_model import (
     REGRESSION_MODEL_REGISTRY,
     train_selected_regression_models,
 )
-from src.training.evaluate import classification_metrics
+from src.models.multimodal_reporting import write_multimodal_report
+from src.training.evaluate import ordinal_classification_metrics
 from src.utils.mlflow_utils import (
     build_mlflow_context,
     log_common_params,
@@ -164,13 +165,13 @@ class MultimodalProspectModel:
             final_core, CLF_TARGET_COL, clf_cfg,
             selected_models=self.clf_models,
             calibration_df=final_cal,
-            use_fixed_xgb_params=False,
+            use_fixed_xgb_params=True,
             mlflow_ctx=mlflow_ctx,
         )
         self.final_reg_bundles = train_selected_regression_models(
             final_core, REG_TARGET_COL, reg_cfg,
             selected_models=self.reg_models,
-            use_fixed_xgb_params=False,
+            use_fixed_xgb_params=True,
             mlflow_ctx=mlflow_ctx,
         )
 
@@ -262,11 +263,10 @@ def run(df=None, cfg=None, run_name=None, tracking_uri=None):
     composite_cfg = model_cfg.get("composite_score") or {}
 
     df = load_data(composite_cfg=composite_cfg) if df is None else df
-    y = df[CLF_TARGET_COL]
 
-    train_df, test_df = train_test_split(
-        df, test_size=TEST_SIZE, stratify=y, random_state=RANDOM_STATE,
-    )
+    chron_train, chron_val, test_df = get_chronological_split(df)
+    train_df = pd.concat([chron_train, chron_val], ignore_index=True)
+    actual_test_size = len(test_df) / len(df)
 
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
@@ -293,7 +293,7 @@ def run(df=None, cfg=None, run_name=None, tracking_uri=None):
         })
         log_data_summary(
             df, target_col=CLF_TARGET_COL, task="classification",
-            test_size=TEST_SIZE, cv_folds=model.cv_folds, random_seed=RANDOM_STATE,
+            test_size=actual_test_size, cv_folds=model.cv_folds, random_seed=RANDOM_STATE,
         )
         log_reproducibility_metadata(device="cpu")
 
@@ -318,7 +318,7 @@ def run(df=None, cfg=None, run_name=None, tracking_uri=None):
         y_test = test_df[CLF_TARGET_COL]
         y_pred = np.argmax(test_proba, axis=1)
 
-        metrics = classification_metrics(y_test, y_pred, test_proba, class_names=TIER_CLASS_NAMES)
+        metrics = ordinal_classification_metrics(y_test, y_pred, test_proba, class_names=TIER_CLASS_NAMES)
         ll = float(log_loss(y_test, test_proba))
         brier = float(np.mean([
             brier_score_loss((y_test == i).astype(int), test_proba[:, i])
@@ -328,38 +328,33 @@ def run(df=None, cfg=None, run_name=None, tracking_uri=None):
         mlflow.log_metrics(all_metrics)
 
         print(f"\n{'='*50}\n  Multimodal Stacker Results\n{'='*50}")
+        priority_metrics = [
+            "top1_accuracy",
+            "within_one_accuracy",
+            "distance_weighted_accuracy",
+            "ordinal_mae",
+            "expected_class_mae",
+            "quadratic_weighted_kappa",
+            "f1_macro",
+        ]
+        printed = set()
+        for key in priority_metrics:
+            if key in all_metrics:
+                print(f"  {key:<35} = {all_metrics[key]:.4f}")
+                printed.add(key)
         for k, v in all_metrics.items():
-            print(f"  {k:<35} = {v:.4f}")
+            if k not in printed:
+                print(f"  {k:<35} = {v:.4f}")
 
         out_dir = os.path.join(model.output_dir, run_name or "latest")
-        os.makedirs(out_dir, exist_ok=True)
-
-        id_cols = [c for c in ["Name", "draft_year"] if c in test_df.columns]
-        pred_df = test_df[id_cols].copy() if id_cols else pd.DataFrame(index=test_df.index)
-        pred_df["actual_tier"]  = y_test.values
-        pred_df["pred_tier"]    = y_pred
-        pred_df["confidence"]   = test_proba.max(axis=1)
-        for i, col in enumerate(PROBA_COLUMNS):
-            pred_df[col] = test_proba[:, i]
-        pred_df.to_csv(os.path.join(out_dir, "test_predictions.csv"), index=False)
-
-        test_mf = model.meta_features(test_df)
-        test_mf.to_csv(os.path.join(out_dir, "test_meta_features.csv"), index=True)
-
-        summary_rows = []
-        for key in model.clf_models:
-            b = model.final_clf_bundles[key]
-            proba = b.predict_tier_proba(test_df)
-            y_hat = np.argmax(proba.values, axis=1)
-            m = classification_metrics(y_test, y_hat, proba.values, class_names=TIER_CLASS_NAMES)
-            summary_rows.append({"model": f"classification__{key}", "task": "classification", **m})
-        for key in model.reg_models:
-            b = model.final_reg_bundles[key]
-            proba = b.predict_tier_proba(test_df)
-            y_hat = np.argmax(proba.values, axis=1)
-            m = classification_metrics(y_test, y_hat, proba.values, class_names=TIER_CLASS_NAMES)
-            summary_rows.append({"model": f"regression__{key}", "task": "regression", **m})
-        pd.DataFrame(summary_rows).to_csv(os.path.join(out_dir, "base_model_summary.csv"), index=False)
+        write_multimodal_report(
+            model=model,
+            test_df=test_df,
+            y_test=y_test,
+            y_pred=y_pred,
+            test_proba=test_proba,
+            out_dir=out_dir,
+        )
 
         print(f"[multimodal] outputs written to {out_dir}/")
 
