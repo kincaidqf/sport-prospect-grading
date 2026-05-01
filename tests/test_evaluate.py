@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.training.evaluate import classification_metrics, regression_metrics
+from src.training.evaluate import classification_metrics, ordinal_classification_metrics, regression_metrics
 
 
 # ── Regression metrics ─────────────────────────────────────────────────────────
@@ -81,3 +81,45 @@ def test_classification_metrics_values_in_range():
     assert 0.0 <= m["accuracy"] <= 1.0
     assert 0.0 <= m["f1_macro"] <= 1.0
     assert 0.0 <= m["auc"] <= 1.0
+
+
+def test_ordinal_classification_metrics_perfect_prediction():
+    y_true = np.array([0, 1, 2, 3])
+    y_pred = y_true.copy()
+    proba = _make_multiclass_proba(y_true, n_classes=4, noise=0.0)
+    m = ordinal_classification_metrics(y_true, y_pred, proba, class_names=["bust", "bench", "starter", "star"])
+    assert m["top1_accuracy"] == pytest.approx(1.0)
+    assert m["ordinal_mae"] == pytest.approx(0.0)
+    assert m["distance_weighted_accuracy"] == pytest.approx(1.0)
+    assert m["quadratic_weighted_kappa"] == pytest.approx(1.0)
+
+
+def test_ordinal_classification_metrics_penalizes_bust_to_star_miss():
+    y_true = np.array([3, 0, 1, 2])
+    y_pred = np.array([0, 0, 1, 2])
+    proba = _make_multiclass_proba(y_pred, n_classes=4, noise=0.0)
+    m = ordinal_classification_metrics(y_true, y_pred, proba, class_names=["bust", "bench", "starter", "star"])
+    assert m["ordinal_mae"] == pytest.approx(0.75)
+    assert m["distance_weighted_accuracy"] == pytest.approx(0.75)
+
+
+def test_ordinal_classification_metrics_within_one_accuracy():
+    y_true = np.array([0, 1, 2, 3])
+    y_pred = np.array([0, 2, 0, 1])
+    proba = _make_multiclass_proba(y_pred, n_classes=4, noise=0.05)
+    m = ordinal_classification_metrics(y_true, y_pred, proba, class_names=["bust", "bench", "starter", "star"])
+    assert m["within_one_accuracy"] == pytest.approx(0.5)
+
+
+def test_ordinal_classification_metrics_expected_class_uses_probabilities():
+    y_true = np.array([3, 0, 1, 2])
+    y_pred = np.array([3, 0, 1, 2])
+    proba = np.array([
+        [0.25, 0.25, 0.25, 0.25],
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+    ])
+    m = ordinal_classification_metrics(y_true, y_pred, proba, class_names=["bust", "bench", "starter", "star"])
+    assert m["top1_accuracy"] == pytest.approx(1.0)
+    assert m["expected_class_mae"] == pytest.approx(0.375)

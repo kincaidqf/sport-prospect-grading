@@ -25,9 +25,11 @@ model:
     nan_floor: -3.0        # composite score assigned to players with no NBA data
   regression:
     target_mode: nba_role_zscore  # plus_minus | composite_score | nba_role_zscore
+    selected_models: ["lasso", "ridge", "xgboost"]
+    probability_target_mode: nba_role_zscore  # target mode valid for Gaussian CDF tier proba
     use_draft_pick: true        # include draft pick as a feature (leaks scout judgment)
     use_engineered_features: false  # add ts_pct, efg_pct, usage_proxy, ast_to, etc.
-    use_pos_categorical: true      # one-hot encode position (Guard/Forward/Center)
+    use_pos_categorical: false      # one-hot encode position (Guard/Forward/Center)
     alpha_min: 1e-4         # lasso/ridge alpha search range
     alpha_max: 1e2
     alpha_steps: 100
@@ -51,10 +53,16 @@ model:
     use_draft_pick: false       # include draft pick as a feature (leaks scout judgment)
     use_engineered_features: false  # add ts_pct, efg_pct, usage_proxy, ast_to, etc.
     use_pos_categorical: false      # one-hot encode position (Guard/Forward/Center)
-    eval_mode: random           # random | chronological | repeated_cv
+    eval_mode: chronological           # random | chronological | repeated_cv
     class_weight: balanced      # null | balanced
     threshold_tuning: false     # true | false — tune per-class prob offsets on val set
     selection_metric: f1_macro  # metric used to rank candidate models
+    selected_models: ["logistic_l1", "logistic_l2", "xgboost"]
+    calibration:
+      enabled: true
+      method: sigmoid
+      calibration_size: 0.15
+      use_calibrated_for_metrics: false
     xgboost:
       # Conservative defaults for fast smoke tests; expand values for full grid search.
       # Full range options: n_estimators [100,300], max_depth [2,3], lr [0.02,0.05,0.1],
@@ -73,6 +81,35 @@ model:
       n_jobs: 1
       grid_n_jobs: 1
       pre_dispatch: 1
+  multimodal:
+    target_mode: prospect_tier
+    cv_folds: 5
+    meta_model: logistic_regression
+    output_dir: outputs/multimodal
+    base_models:
+      classification: ["logistic_l1", "xgboost"]
+      regression: ["lasso", "xgboost"]
+    calibration:
+      method: sigmoid
+      calibration_size: 0.15
+    use_engineered_features:
+      classification: false
+      regression: false
+    use_pos_categorical:
+      classification: false
+      regression: true
+    xgboost:
+      pretune_oof_params: false
+      oof_params:
+        n_estimators: 200
+        max_depth: 3
+        learning_rate: 0.05
+        subsample: 0.8
+        colsample_bytree: 1.0
+        min_child_weight: 3
+        reg_alpha: 0.0
+        reg_lambda: 1.0
+        gamma: 0.0
   text:
     pretrained: "distilbert-base-uncased"
     output_dim: 128

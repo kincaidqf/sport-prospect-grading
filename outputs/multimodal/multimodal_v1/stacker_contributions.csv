@@ -1,0 +1,5 @@
+,bust,bench,starter,star
+classification__logistic_l1,0.7988,1.3336,1.5792,2.5328
+classification__xgboost,0.5944,1.5375,1.2588,1.767
+regression__lasso,2.7836,1.1897,1.2315,4.649
+regression__xgboost,3.5933,1.8203,2.5357,2.8779

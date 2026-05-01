@@ -3,9 +3,10 @@
 Checks:
   1. No leakage columns in classification feature list when use_draft_pick=False.
   2. Engineered feature columns exist after load_data.
-  3. prospect_tier has exactly 3 classes (0, 1, 2).
+  3. prospect_tier has exactly 4 classes (0, 1, 2, 3).
   4. Chronological split has no train year >= first validation year.
   5. predict_proba_stats output rows match input and probabilities sum to ~1.
+  6. predict_proba_stats outputs exactly the 4 required probability columns.
 
 Run:
   uv run python scripts/check_classification_contract.py
@@ -65,25 +66,25 @@ def main() -> int:
     print("\n=== Classification Contract Checks ===\n")
 
     cfg          = _load_config()
-    composite_cfg = (cfg.get("model") or {}).get("composite_score") or {}
-    tier_pct     = tuple(composite_cfg.get("tier_percentiles", (50, 80)))
-    print(f"[config] tier_percentiles = {tier_pct}")
+    role_cfg     = (cfg.get("model") or {}).get("nba_role_score") or {}
+    tier_thresh  = tuple(role_cfg.get("tier_thresholds", (-0.5, 0.5, 1.5)))
+    print(f"[config] tier_thresholds = {tier_thresh}")
 
     # ── Load data ──────────────────────────────────────────────────────────────
     print("Loading data...")
-    df = load_data(composite_cfg=composite_cfg)
+    df = load_data()
     print(f"  Loaded {len(df)} rows\n")
 
     # 1. No leakage columns
     print("1. Leakage check (use_draft_pick=False)")
-    _, num_cols, cat_cols, ord_cols = build_feature_matrix(
+    _, num_cols, cat_cols, ord_cols, passthrough_cols = build_feature_matrix(
         df,
         use_draft_pick=False,
         exclude_features=CLASSIFICATION_EXCLUDED_NUMERIC,
         use_engineered_features=True,
         use_pos_categorical=True,
     )
-    all_cols = set(num_cols + cat_cols + ord_cols)
+    all_cols = set(num_cols + cat_cols + ord_cols + passthrough_cols)
     leakage_cols = {"draft_pick", "big_board_rank", "actual_pick", "nba_team_drafted_by",
                     "PLUS_MINUS", "MIN", "GP", "became_starter", "composite_score"}
     found_leakage = leakage_cols & all_cols
@@ -99,11 +100,11 @@ def main() -> int:
         ok = pct < 50
         failures += not check(ok, f"  {feat}: {n_null} nulls ({pct:.1f}%)")
 
-    # 3. prospect_tier has exactly 3 classes
+    # 3. prospect_tier has exactly 4 classes
     print("\n3. prospect_tier class count")
     tier_classes = sorted(int(c) for c in df["prospect_tier"].unique())
-    failures += not check(tier_classes == [0, 1, 2], f"prospect_tier classes = {tier_classes}")
-    for cls, name in enumerate(["Bust", "Contributor", "Star"]):
+    failures += not check(tier_classes == [0, 1, 2, 3], f"prospect_tier classes = {tier_classes}")
+    for cls, name in enumerate(["Bust", "Bench", "Starter", "Star"]):
         n = (df["prospect_tier"] == cls).sum()
         check(n > 0, f"  class {cls} ({name}): {n} players")
 
@@ -122,17 +123,17 @@ def main() -> int:
 
     # 5. predict_proba_stats shape and probability sums
     print("\n5. predict_proba_stats output contract")
-    _, num_cols, cat_cols, ord_cols = build_feature_matrix(
+    _, num_cols, cat_cols, ord_cols, passthrough_cols = build_feature_matrix(
         df,
         use_draft_pick=False,
         exclude_features=CLASSIFICATION_EXCLUDED_NUMERIC,
         use_engineered_features=True,
         use_pos_categorical=True,
     )
-    feature_cols = num_cols + cat_cols + ord_cols
+    feature_cols = num_cols + cat_cols + ord_cols + passthrough_cols
 
     # Fit a tiny surrogate pipeline just for the contract test
-    preprocessor, _, _, _ = build_feature_matrix(
+    preprocessor, _, _, _, _ = build_feature_matrix(
         df,
         use_draft_pick=False,
         exclude_features=CLASSIFICATION_EXCLUDED_NUMERIC,
@@ -155,6 +156,16 @@ def main() -> int:
 
     no_draft_pick = "draft_pick" not in proba_df.columns
     failures += not check(no_draft_pick, "output does not contain draft_pick column")
+
+    # 6. Exactly the 4 required probability columns are present
+    print("\n6. Probability column contract")
+    required_prob_cols = ["p_bust", "p_bench", "p_starter", "p_star"]
+    actual_prob_cols   = sorted(prob_cols)
+    required_sorted    = sorted(required_prob_cols)
+    failures += not check(
+        actual_prob_cols == required_sorted,
+        f"probability columns = {actual_prob_cols} (expected {required_sorted})",
+    )
 
     # Summary
     print(f"\n{'='*40}")

@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--config", default="src/config/config.yaml")
     p.add_argument(
         "--model",
-        choices=["regression", "classification", "text"],
+        choices=["regression", "classification", "text", "multimodal"],
         default=None,
         help="Override model.type from config",
     )
@@ -35,7 +35,7 @@ def load_config(path: str) -> dict:
 
 def _ensure_macos_openmp_for_xgboost(model_type: str) -> None:
     """Restart with a known OpenMP path when macOS XGBoost cannot find libomp."""
-    if model_type not in {"regression", "classification"}:
+    if model_type not in {"regression", "classification", "multimodal"}:
         return
     if platform.system() != "Darwin":
         return
@@ -106,6 +106,13 @@ def main() -> None:
         cm.run(
             target_mode=classification_cfg.get("target_mode", "prospect_tier"),
             use_draft_pick=classification_cfg.get("use_draft_pick", False),
+            cfg=cfg,
+            run_name=args.run_name,
+            tracking_uri=args.tracking_uri,
+        )
+    elif model_type == "multimodal":
+        import src.models.multimodal as mm
+        mm.run(
             cfg=cfg,
             run_name=args.run_name,
             tracking_uri=args.tracking_uri,
