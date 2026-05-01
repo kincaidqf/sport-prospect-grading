@@ -25,6 +25,8 @@ model:
     nan_floor: -3.0        # composite score assigned to players with no NBA data
   regression:
     target_mode: nba_role_zscore  # plus_minus | composite_score | nba_role_zscore
+    selected_models: ["lasso", "ridge", "xgboost"]
+    probability_target_mode: nba_role_zscore  # target mode valid for Gaussian CDF tier proba
     use_draft_pick: true        # include draft pick as a feature (leaks scout judgment)
     use_engineered_features: false  # add ts_pct, efg_pct, usage_proxy, ast_to, etc.
     use_pos_categorical: true      # one-hot encode position (Guard/Forward/Center)
@@ -55,6 +57,12 @@ model:
     class_weight: balanced      # null | balanced
     threshold_tuning: false     # true | false — tune per-class prob offsets on val set
     selection_metric: f1_macro  # metric used to rank candidate models
+    selected_models: ["logistic_l1", "logistic_l2", "xgboost"]
+    calibration:
+      enabled: true
+      method: sigmoid
+      calibration_size: 0.15
+      use_calibrated_for_metrics: false
     xgboost:
       # Conservative defaults for fast smoke tests; expand values for full grid search.
       # Full range options: n_estimators [100,300], max_depth [2,3], lr [0.02,0.05,0.1],

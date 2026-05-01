@@ -274,16 +274,6 @@ def _load_project_config() -> dict:
         return {}
 
 
-def _assign_tier(composite, percentiles=(50, 80)):
-    """Bin composite scores into 0=Bust, 1=Contributor, 2=Star.
-
-    Cut points are derived from the given percentiles of the composite
-    distribution, making it easy to shift tier boundaries via config.
-    """
-    cuts = np.percentile(composite, list(percentiles))
-    return pd.Series(np.digitize(composite.values, cuts), index=composite.index, dtype=int)
-
-
 def _compute_nba_role_score(df, mode, weights, winsor_clip=2.5, nan_floor=-3.0):
     """Weighted, winsorized z-score composite of NBA role stats.
 
@@ -355,11 +345,10 @@ def load_data(composite_cfg=None):
     if not composite_cfg:
         composite_cfg = _full_cfg.get("composite_score") or {}
     _cfg             = composite_cfg
-    w_min            = _cfg.get("w_min", 0.55)
-    w_gp             = _cfg.get("w_gp", 0.30)
-    w_pm             = _cfg.get("w_plus_minus", 0.15)
-    tier_percentiles = tuple(_cfg.get("tier_percentiles", (50, 80)))
-    nan_floor        = float(_cfg.get("nan_floor", -3.0))
+    w_min     = _cfg.get("w_min", 0.55)
+    w_gp      = _cfg.get("w_gp", 0.30)
+    w_pm      = _cfg.get("w_plus_minus", 0.15)
+    nan_floor = float(_cfg.get("nan_floor", -3.0))
 
     # nba_role_score config
     _role_cfg         = _full_cfg.get("nba_role_score") or {}

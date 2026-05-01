@@ -3,7 +3,7 @@
 Usage
 -----
 After running classification training, load the saved sklearn pipeline and call
-predict_proba_stats() to produce calibrated 3-class probabilities.  The output
+predict_proba_stats() to produce calibrated 4-class probabilities.  The output
 can be used directly as stats-branch input for multimodal experiments.
 
 No post-draft fields (draft_pick, big_board_rank, NBA outcomes) are ever read
@@ -26,7 +26,7 @@ from src.data.loader import (
     load_data,
 )
 
-TIER_CLASS_NAMES = ["bust", "contributor", "star"]
+TIER_CLASS_NAMES = ["bust", "bench", "starter", "star"]
 TARGET_MODE = "prospect_tier"
 
 
@@ -46,7 +46,7 @@ def predict_proba_stats(
 ) -> pd.DataFrame:
     """Return per-class probabilities and predicted tier for each player.
 
-    Output columns: p_bust, p_contributor, p_star, pred_tier, confidence.
+    Output columns: p_bust, p_bench, p_starter, p_star, pred_tier, confidence.
     Rows match df exactly (same index).  Never includes draft_pick or scouting rank.
     """
     proba = pipeline.predict_proba(df[feature_cols])

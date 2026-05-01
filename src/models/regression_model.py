@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import nullcontext
 
 import matplotlib.pyplot as plt
 import mlflow
@@ -12,7 +13,7 @@ from sklearn.base import clone
 from sklearn.linear_model import LassoCV, RidgeCV
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.pipeline import Pipeline
-# XGBRegressor is imported lazily inside train_and_evaluate to prevent macOS
+# XGBRegressor is imported lazily inside train_selected_regression_models to prevent macOS
 # OpenMP libomp conflicts at module initialization time.
 
 from src.data.loader import (
@@ -25,6 +26,7 @@ from src.data.loader import (
     build_feature_matrix,
     load_data,
 )
+from src.models.probability import BaseModelBundle, TIER_THRESHOLDS
 from src.training.evaluate import regression_metrics
 from src.utils.features import (
     get_lasso_coef_df,
@@ -50,26 +52,107 @@ TARGET_MODE = "nba_role_zscore"
 USE_DRAFT_PICK = False
 ARTIFACT_DIR = os.path.join(PROJECT_ROOT, "outputs", "plots")
 
+REGRESSION_MODEL_REGISTRY: list[str] = ["lasso", "ridge", "xgboost"]
+_DISPLAY_NAMES = {"lasso": "Lasso", "ridge": "Ridge", "xgboost": "XGBoost"}
 
-def train_and_evaluate(
-    df,
-    target_mode=TARGET_MODE,
-    use_draft_pick=USE_DRAFT_PICK,
+
+# ── XGBoost fixed-param helpers ────────────────────────────────────────────────
+
+def _first(x):
+    return x[0] if isinstance(x, list) else x
+
+
+def _get_oof_xgb_params_regression(cfg: dict) -> dict:
+    """Return the single XGBoost parameter set used for OOF fold training.
+
+    Checks model.multimodal.xgboost.oof_params first (set when multimodal
+    pre-tuning is enabled). Falls back to the first value of each grid list
+    in the regression xgboost config.
+    """
+    multimodal_xgb = (
+        ((cfg or {}).get("model", {}) or {})
+        .get("multimodal", {})
+        .get("xgboost", {}) or {}
+    )
+    oof = multimodal_xgb.get("oof_params")
+    if oof:
+        return dict(oof)
+
+    xgb_cfg = (
+        ((cfg or {}).get("model", {}) or {})
+        .get("regression", {})
+        .get("xgboost", {}) or {}
+    )
+    return {
+        "n_estimators":     _first(xgb_cfg.get("n_estimators",     [200])),
+        "max_depth":        _first(xgb_cfg.get("max_depth",         [3])),
+        "learning_rate":    _first(xgb_cfg.get("learning_rate",     [0.05])),
+        "subsample":        _first(xgb_cfg.get("subsample",         [0.8])),
+        "colsample_bytree": _first(xgb_cfg.get("colsample_bytree",  [1.0])),
+        "min_child_weight": _first(xgb_cfg.get("min_child_weight",  [3])),
+        "reg_alpha":        _first(xgb_cfg.get("reg_alpha",         [0.0])),
+        "reg_lambda":       _first(xgb_cfg.get("reg_lambda",        [1.0])),
+        "gamma":            _first(xgb_cfg.get("gamma",             [0.0])),
+    }
+
+
+# ── Shared training entry point ────────────────────────────────────────────────
+
+def train_selected_regression_models(
+    train_df: pd.DataFrame,
+    target_col: str,
+    cfg: dict,
+    selected_models: list[str] | None = None,
+    use_fixed_xgb_params: bool = False,
     mlflow_ctx=None,
-    xgb_cfg=None,
-    reg_cfg=None,
-    prospect_context_mode=PROSPECT_CONTEXT_MODE,
-    use_engineered_features=False,
-    use_pos_categorical=False,
-    input_normalization_mode="global",
-):
-    if target_mode not in REGRESSION_TARGETS:
-        raise ValueError(
-            f"regression_model only supports {sorted(REGRESSION_TARGETS)}; got {target_mode!r}"
-        )
+    return_bundles: bool = True,
+) -> dict[str, BaseModelBundle]:
+    """Train selected regression models and return a BaseModelBundle per model.
+
+    No calibration split is needed — tier probabilities are derived entirely via
+    the Gaussian CDF algorithm using training residual_std stored in the bundle.
+    Calling predict_tier_proba() on a bundle whose target is not nba_role_zscore
+    will raise (residual_std is set to 0.0 as a guard).
+
+    When mlflow_ctx is provided, a nested MLflow run is opened per model for
+    training params and model artifact logging.  When mlflow_ctx is None (OOF
+    fold use), no MLflow runs are created.
+
+    Parameters
+    ----------
+    train_df             : training rows
+    target_col           : continuous regression target column in train_df
+    cfg                  : full project config dict
+    selected_models      : subset of REGRESSION_MODEL_REGISTRY; None → all models
+    use_fixed_xgb_params : skip GridSearchCV for XGBoost; use OOF fixed params
+    mlflow_ctx           : MLflowContext for nested run creation; None → no logging
+    return_bundles       : always True; kept for interface symmetry with classification
+    """
+    from xgboost import XGBRegressor  # noqa: PLC0415
+
+    model_cfg = (cfg or {}).get("model", {}) or {}
+    reg_cfg   = model_cfg.get("regression", {}) or {}
+    xgb_cfg   = reg_cfg.get("xgboost") or {}
+
+    prospect_context_mode    = model_cfg.get("prospect_context_mode", PROSPECT_CONTEXT_MODE)
+    use_engineered_features  = bool(reg_cfg.get("use_engineered_features", False))
+    use_pos_categorical      = bool(reg_cfg.get("use_pos_categorical", False))
+    input_normalization_mode = model_cfg.get("input_normalization_mode", "global")
+    use_draft_pick           = bool(reg_cfg.get("use_draft_pick", USE_DRAFT_PICK))
+
+    alpha_min       = float(reg_cfg.get("alpha_min",   1e-4))
+    alpha_max       = float(reg_cfg.get("alpha_max",   1e2))
+    alpha_steps     = int(reg_cfg.get("alpha_steps",   100))
+    linear_cv_folds = int(reg_cfg.get("cv_folds",      5))
+    alphas = np.logspace(np.log10(alpha_min), np.log10(alpha_max), alpha_steps)
+
+    cv_folds     = xgb_cfg.get("cv_folds", 5)
+    xgb_n_jobs   = xgb_cfg.get("n_jobs", 1)
+    grid_n_jobs  = xgb_cfg.get("grid_n_jobs", 1)
+    pre_dispatch = xgb_cfg.get("pre_dispatch", 1)
 
     preprocessor, numeric_cols, categorical_cols, ordinal_cols, passthrough_cols = build_feature_matrix(
-        df,
+        train_df,
         use_draft_pick=use_draft_pick,
         prospect_context_mode=prospect_context_mode,
         use_engineered_features=use_engineered_features,
@@ -77,236 +160,146 @@ def train_and_evaluate(
         input_normalization_mode=input_normalization_mode,
     )
     feature_cols = numeric_cols + categorical_cols + ordinal_cols + passthrough_cols
-    col = TARGET_COL[target_mode]
-    train, test = train_test_split(df, test_size=TEST_SIZE, random_state=RANDOM_STATE)
 
-    X_train, y_train = train[feature_cols], train[col]
-    X_test, y_test = test[feature_cols], test[col]
+    models_to_train = list(selected_models) if selected_models is not None else list(REGRESSION_MODEL_REGISTRY)
+    unknown = [k for k in models_to_train if k not in REGRESSION_MODEL_REGISTRY]
+    if unknown:
+        raise ValueError(f"Unknown regression model key(s): {unknown}. Valid: {REGRESSION_MODEL_REGISTRY}")
 
-    print(f"\nTarget:  {target_mode}")
-    print(f"Dataset: {len(df)} total players")
-    print(f"Train:   {len(train)} | Test: {len(test)}")
-    print(f"Features: {len(feature_cols)} raw columns → expanded after one-hot\n")
+    X_train = train_df[feature_cols]
+    y_train = train_df[target_col]
 
-    results = {}
-    col_info = {
-        "numeric_cols": numeric_cols,
-        "categorical_cols": categorical_cols,
-        "ordinal_cols": ordinal_cols,
-    }
+    # Tier-probability output is only valid when target is nba_role_zscore.
+    # For any other target, residual_std=0.0 ensures predict_tier_proba() raises.
+    prob_target_mode = reg_cfg.get("probability_target_mode", "nba_role_zscore")
+    zscore_col = TARGET_COL.get(prob_target_mode, "")
+    is_zscore_target = (target_col == zscore_col)
 
-    _run_regression(
-        preprocessor,
-        numeric_cols,
-        categorical_cols,
-        ordinal_cols,
-        X_train,
-        y_train,
-        X_test,
-        y_test,
-        train,
-        test,
-        target_mode,
-        use_draft_pick,
-        results,
-        mlflow_ctx,
-        xgb_cfg=xgb_cfg,
-        reg_cfg=reg_cfg,
-    )
-    return results, y_test, col_info
+    bundles: dict[str, BaseModelBundle] = {}
 
-
-def _run_regression(
-    preprocessor,
-    numeric_cols,
-    categorical_cols,
-    ordinal_cols,
-    X_train,
-    y_train,
-    X_test,
-    y_test,
-    train,
-    test,
-    target_mode,
-    use_draft_pick,
-    results,
-    mlflow_ctx,
-    xgb_cfg=None,
-    reg_cfg=None,
-):
-    _rcfg = reg_cfg or {}
-    alpha_min       = float(_rcfg.get("alpha_min",    1e-4))
-    alpha_max       = float(_rcfg.get("alpha_max",    1e2))
-    alpha_steps     = int(_rcfg.get("alpha_steps",   100))
-    linear_cv_folds = int(_rcfg.get("cv_folds",      5))
-    alphas = np.logspace(np.log10(alpha_min), np.log10(alpha_max), alpha_steps)
-
-    for name, model in [
-        ("Lasso", LassoCV(alphas=alphas, cv=linear_cv_folds, max_iter=10000, random_state=RANDOM_STATE)),
-        ("Ridge", RidgeCV(alphas=alphas, cv=linear_cv_folds)),
-    ]:
-        run_manager = managed_run(
-            mlflow_ctx,
-            run_name=f"{mlflow_ctx.parent_run_name}__{name.lower()}",
-            nested=True,
-            tags={"estimator": name.lower()},
-        ) if mlflow_ctx else mlflow.start_run(run_name=f"{name}_{target_mode}")
-        with run_manager:
-            pipe = Pipeline([("preprocessor", preprocessor), (name.lower(), model)])
-            pipe.fit(X_train, y_train)
-            y_pred = pipe.predict(X_test)
-            metrics = regression_metrics(y_test, y_pred)
-
-            log_common_params(
-                {
-                    "model": name,
-                    "target": target_mode,
-                    "alpha": model.alpha_,
-                    "alpha_search_min": alphas[0],
-                    "alpha_search_max": alphas[-1],
-                    "alpha_search_n": len(alphas),
-                    "cv_folds": linear_cv_folds,
-                    "random_seed": RANDOM_STATE,
-                    "n_train": len(train),
-                    "n_test": len(test),
-                    "use_draft_pick": use_draft_pick,
-                }
+    for key in models_to_train:
+        run_mgr = (
+            managed_run(
+                mlflow_ctx,
+                run_name=f"{mlflow_ctx.parent_run_name}__{key}",
+                nested=True,
+                tags={"estimator": key},
             )
-            mlflow.log_metrics(metrics)
+            if mlflow_ctx else nullcontext()
+        )
+        with run_mgr:
+            if key == "lasso":
+                model = LassoCV(alphas=alphas, cv=linear_cv_folds, max_iter=10000, random_state=RANDOM_STATE)
+                pipe = Pipeline([("preprocessor", clone(preprocessor)), ("lasso", model)])
+                pipe.fit(X_train, y_train)
+                if mlflow_ctx:
+                    log_common_params({
+                        "model": key, "target": target_col,
+                        "alpha": model.alpha_,
+                        "alpha_search_min": alphas[0], "alpha_search_max": alphas[-1],
+                        "alpha_search_n": len(alphas), "cv_folds": linear_cv_folds,
+                        "random_seed": RANDOM_STATE, "n_train": len(X_train),
+                        "use_draft_pick": use_draft_pick,
+                        "use_fixed_xgb_params": use_fixed_xgb_params,
+                    })
+                    coef_df = get_lasso_coef_df(pipe, numeric_cols, categorical_cols, ordinal_cols)
+                    mlflow.log_metric("n_nonzero_features", len(coef_df))
+                    mlflow.sklearn.log_model(pipe, artifact_path=key)
 
-            if name == "Lasso":
-                coef_df = get_lasso_coef_df(pipe, numeric_cols, categorical_cols, ordinal_cols)
-                mlflow.log_metric("n_nonzero_features", len(coef_df))
+            elif key == "ridge":
+                model = RidgeCV(alphas=alphas, cv=linear_cv_folds)
+                pipe = Pipeline([("preprocessor", clone(preprocessor)), ("ridge", model)])
+                pipe.fit(X_train, y_train)
+                if mlflow_ctx:
+                    log_common_params({
+                        "model": key, "target": target_col,
+                        "alpha": model.alpha_,
+                        "alpha_search_min": alphas[0], "alpha_search_max": alphas[-1],
+                        "alpha_search_n": len(alphas), "cv_folds": linear_cv_folds,
+                        "random_seed": RANDOM_STATE, "n_train": len(X_train),
+                        "use_draft_pick": use_draft_pick,
+                        "use_fixed_xgb_params": use_fixed_xgb_params,
+                    })
+                    mlflow.sklearn.log_model(pipe, artifact_path=key)
 
-            mlflow.sklearn.log_model(pipe, artifact_path=name.lower())
-            results[name] = {
-                "pipe": pipe,
-                "model": model,
-                "y_pred": y_pred,
-                "r2": metrics["r2"],
-                "rmse": metrics["rmse"],
-                "mae": metrics["mae"],
-                "alpha": model.alpha_,
-                "importance_kind": "coef",
-                "estimator_step": name.lower(),
-            }
+            elif key == "xgboost":
+                if use_fixed_xgb_params:
+                    fixed = _get_oof_xgb_params_regression(cfg)
+                    pipe = Pipeline([
+                        ("preprocessor", clone(preprocessor)),
+                        ("xgb", XGBRegressor(
+                            random_state=RANDOM_STATE, n_jobs=xgb_n_jobs, verbosity=0,
+                            **fixed,
+                        )),
+                    ])
+                    pipe.fit(X_train, y_train)
+                    if mlflow_ctx:
+                        log_common_params({
+                            "model": key, "target": target_col,
+                            "use_fixed_xgb_params": True, "n_train": len(X_train),
+                            **fixed,
+                        })
+                        mlflow.sklearn.log_model(pipe, artifact_path=key)
+                else:
+                    param_grid = {
+                        "xgb__n_estimators":     xgb_cfg.get("n_estimators",     [100, 200]),
+                        "xgb__max_depth":        xgb_cfg.get("max_depth",        [2, 3]),
+                        "xgb__learning_rate":    xgb_cfg.get("learning_rate",    [0.05, 0.1]),
+                        "xgb__subsample":        xgb_cfg.get("subsample",        [0.7, 0.9]),
+                        "xgb__colsample_bytree": xgb_cfg.get("colsample_bytree", [0.7, 1.0]),
+                        "xgb__min_child_weight": xgb_cfg.get("min_child_weight", [3, 5, 10]),
+                        "xgb__reg_alpha":        xgb_cfg.get("reg_alpha",        [0, 0.1, 1]),
+                        "xgb__reg_lambda":       xgb_cfg.get("reg_lambda",       [1, 5, 10]),
+                        "xgb__gamma":            xgb_cfg.get("gamma",            [0]),
+                    }
+                    xgb_base = Pipeline([
+                        ("preprocessor", clone(preprocessor)),
+                        ("xgb", XGBRegressor(
+                            random_state=RANDOM_STATE, n_jobs=xgb_n_jobs, verbosity=0,
+                        )),
+                    ])
+                    gs = GridSearchCV(
+                        xgb_base, param_grid, cv=cv_folds,
+                        scoring="r2", n_jobs=grid_n_jobs, pre_dispatch=pre_dispatch,
+                    )
+                    gs.fit(X_train, y_train)
+                    pipe = gs.best_estimator_
+                    if mlflow_ctx:
+                        log_common_params({
+                            "model": key, "target": target_col,
+                            "cv_folds": cv_folds, "use_fixed_xgb_params": False,
+                            "n_train": len(X_train),
+                            **{k.replace("xgb__", ""): v for k, v in gs.best_params_.items()},
+                            "best_cv_score": round(float(gs.best_score_), 4),
+                            **{f"grid_{k.replace('xgb__','')}": str(v) for k, v in param_grid.items()},
+                        })
+                        log_xgb_importances(pipe, numeric_cols, categorical_cols, ordinal_cols)
+                        mlflow.sklearn.log_model(pipe, artifact_path=key)
 
-            print(f"{'='*40}")
-            print(f"  {name} (alpha={model.alpha_:.4f})")
-            print(f"  R²   = {metrics['r2']:.4f}")
-            print(f"  RMSE = {metrics['rmse']:.4f}")
-            print(f"  MAE  = {metrics['mae']:.4f}")
+                    print(f"\n{'='*40}\n  XGBoost Feature Importances (top 10)\n{'='*40}")
+                    print_xgb_importances(pipe, numeric_cols, categorical_cols, ordinal_cols)
 
-    cfg = xgb_cfg or {}
-    param_grid = {
-        "xgb__n_estimators":     cfg.get("n_estimators",     [100, 200]),
-        "xgb__max_depth":        cfg.get("max_depth",        [2, 3]),
-        "xgb__learning_rate":    cfg.get("learning_rate",    [0.05, 0.1]),
-        "xgb__subsample":        cfg.get("subsample",        [0.7, 0.9]),
-        "xgb__colsample_bytree": cfg.get("colsample_bytree", [0.7, 1.0]),
-        "xgb__min_child_weight": cfg.get("min_child_weight", [3, 5, 10]),
-        "xgb__reg_alpha":        cfg.get("reg_alpha",        [0, 0.1, 1]),
-        "xgb__reg_lambda":       cfg.get("reg_lambda",       [1, 5, 10]),
-        "xgb__gamma":            cfg.get("gamma",            [0]),
-    }
-    cv_folds = cfg.get("cv_folds", 5)
-    xgb_n_jobs = cfg.get("n_jobs", 1)
-    grid_n_jobs = cfg.get("grid_n_jobs", 1)
-    pre_dispatch = cfg.get("pre_dispatch", 1)
+            # Gaussian CDF conversion requires training residuals; only valid for zscore target
+            if is_zscore_target:
+                y_pred_train = pipe.predict(X_train)
+                residual_std = float(np.std(np.asarray(y_train) - y_pred_train))
+            else:
+                residual_std = 0.0  # guard: predict_tier_proba() will raise
 
-    try:
-        run_manager = managed_run(
-            mlflow_ctx,
-            run_name=f"{mlflow_ctx.parent_run_name}__xgboost",
-            nested=True,
-            tags={"estimator": "xgboost"},
-        ) if mlflow_ctx else mlflow.start_run(run_name=f"XGBoost_{target_mode}")
-        with run_manager:
-            log_common_params(
-                {
-                    "model": "XGBoost",
-                    "target": target_mode,
-                    "cv_folds": cv_folds,
-                    "xgb_n_jobs": xgb_n_jobs,
-                    "grid_n_jobs": grid_n_jobs,
-                    "pre_dispatch": pre_dispatch,
-                    "n_estimators_grid": param_grid["xgb__n_estimators"],
-                    "max_depth_grid": param_grid["xgb__max_depth"],
-                    "learning_rate_grid": param_grid["xgb__learning_rate"],
-                    "subsample_grid": param_grid["xgb__subsample"],
-                    "random_seed": RANDOM_STATE,
-                    "n_train": len(X_train),
-                    "n_test": len(X_test),
-                    "use_draft_pick": use_draft_pick,
-                }
+            bundles[key] = BaseModelBundle(
+                name=key,
+                task="regression",
+                estimator=pipe,
+                feature_cols=feature_cols,
+                proba_estimator=None,
+                residual_std=residual_std,
+                thresholds=TIER_THRESHOLDS,
             )
-            from xgboost import XGBRegressor  # noqa: PLC0415
-            xgb_base = Pipeline(
-                [
-                    ("preprocessor", clone(preprocessor)),
-                    (
-                        "xgb",
-                        XGBRegressor(
-                            random_state=RANDOM_STATE,
-                            n_jobs=xgb_n_jobs,
-                            verbosity=0,
-                        ),
-                    ),
-                ]
-            )
-            gs = GridSearchCV(
-                xgb_base,
-                param_grid,
-                cv=cv_folds,
-                scoring="r2",
-                n_jobs=grid_n_jobs,
-                pre_dispatch=pre_dispatch,
-            )
-            gs.fit(X_train, y_train)
-            best = gs.best_estimator_
-            y_pred_xgb = best.predict(X_test)
-            metrics_xgb = regression_metrics(y_test, y_pred_xgb)
 
-            log_common_params(
-                {
-                    **{key.replace("xgb__", ""): value for key, value in gs.best_params_.items()},
-                    "best_cv_score": round(float(gs.best_score_), 4),
-                }
-            )
-            mlflow.log_metrics(metrics_xgb)
-            log_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
-            mlflow.sklearn.log_model(best, artifact_path="xgboost")
+    return bundles
 
-        results["XGBoost"] = {
-            "pipe": best,
-            "model": best.named_steps["xgb"],
-            "y_pred": y_pred_xgb,
-            "r2": metrics_xgb["r2"],
-            "rmse": metrics_xgb["rmse"],
-            "mae": metrics_xgb["mae"],
-            "alpha": None,
-            "best_cv_score": round(float(gs.best_score_), 4),
-            "importance_kind": "xgb",
-            "estimator_step": "xgb",
-        }
 
-        print(f"{'='*40}")
-        print(f"  XGBoost  (best: {gs.best_params_})")
-        print(f"  R²   = {metrics_xgb['r2']:.4f}")
-        print(f"  RMSE = {metrics_xgb['rmse']:.4f}")
-        print(f"  MAE  = {metrics_xgb['mae']:.4f}")
-
-        print(f"\n{'='*40}\n  XGBoost Feature Importances (top 10)\n{'='*40}")
-        print_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
-
-    except Exception as exc:
-        import traceback
-        print(f"\n[WARNING] XGBoost training failed and will be skipped: {exc}")
-        traceback.print_exc()
-
-    print(f"\n{'='*40}\n  Lasso Feature Importances (non-zero only)\n{'='*40}")
-    print_lasso_coefficients(results["Lasso"]["pipe"], numeric_cols, categorical_cols, ordinal_cols)
-
+# ── Plotting ───────────────────────────────────────────────────────────────────
 
 def plot_results(results, y_test, col_info, target_mode=TARGET_MODE, plot_dir=ARTIFACT_DIR):
     _plot_regression(results, y_test, target_mode, plot_dir=plot_dir)
@@ -371,17 +364,48 @@ def _plot_regression(results, y_test, target_mode, plot_dir):
     )
 
 
+# ── Entry point ────────────────────────────────────────────────────────────────
+
 def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=None, run_name=None, tracking_uri=None):
     model_cfg                = (cfg or {}).get("model", {}) or {}
     composite_cfg            = model_cfg.get("composite_score") or {}
     reg_cfg                  = model_cfg.get("regression", {}) or {}
-    xgb_cfg                  = reg_cfg.get("xgboost") or {}
     target_score_mode        = (model_cfg.get("nba_role_score") or {}).get("target_score_mode", "global")
     prospect_context_mode    = model_cfg.get("prospect_context_mode", PROSPECT_CONTEXT_MODE)
     use_engineered_features  = bool(reg_cfg.get("use_engineered_features", False))
     use_pos_categorical      = bool(reg_cfg.get("use_pos_categorical", False))
     input_normalization_mode = model_cfg.get("input_normalization_mode", "global")
+    use_draft_pick           = bool(reg_cfg.get("use_draft_pick", USE_DRAFT_PICK))
+    selected_models          = reg_cfg.get("selected_models") or list(REGRESSION_MODEL_REGISTRY)
+
     df = load_data(composite_cfg=composite_cfg) if df is None else df
+    target_col = TARGET_COL[target_mode]
+
+    # Build col_info for plotting (build_feature_matrix called again inside train_selected_regression_models)
+    _, numeric_cols, categorical_cols, ordinal_cols, passthrough_cols = build_feature_matrix(
+        df,
+        use_draft_pick=use_draft_pick,
+        prospect_context_mode=prospect_context_mode,
+        use_engineered_features=use_engineered_features,
+        use_pos_categorical=use_pos_categorical,
+        input_normalization_mode=input_normalization_mode,
+    )
+    col_info = {
+        "numeric_cols": numeric_cols,
+        "categorical_cols": categorical_cols,
+        "ordinal_cols": ordinal_cols,
+    }
+    feature_cols = numeric_cols + categorical_cols + ordinal_cols + passthrough_cols
+
+    # run() owns the train/test split
+    train_df, test_df = train_test_split(df, test_size=TEST_SIZE, random_state=RANDOM_STATE)
+    y_test = test_df[target_col]
+
+    print(f"\nTarget:  {target_mode}")
+    print(f"Dataset: {len(df)} total players")
+    print(f"Train:   {len(train_df)} | Test: {len(test_df)}")
+    print(f"Features: {len(feature_cols)} raw columns → expanded after one-hot\n")
+
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
         model_type="regression",
@@ -390,43 +414,71 @@ def run(target_mode=TARGET_MODE, use_draft_pick=USE_DRAFT_PICK, df=None, cfg=Non
         tracking_uri=tracking_uri,
         run_name=run_name,
     )
+
     with managed_run(mlflow_ctx):
         if cfg is not None:
             log_config_dict(cfg)
-        log_common_params(
-            {
-                "model_family": "regression",
-                "target": target_mode,
-                "target_score_mode": target_score_mode,
-                "input_normalization_mode": input_normalization_mode,
-                "use_draft_pick": use_draft_pick,
-                "use_engineered_features": use_engineered_features,
-                "use_pos_categorical": use_pos_categorical,
-            }
-        )
+        log_common_params({
+            "model_family":            "regression",
+            "target":                  target_mode,
+            "target_score_mode":       target_score_mode,
+            "input_normalization_mode": input_normalization_mode,
+            "use_draft_pick":          use_draft_pick,
+            "use_engineered_features": use_engineered_features,
+            "use_pos_categorical":     use_pos_categorical,
+            "selected_models":         str(selected_models),
+        })
         log_data_summary(
             df,
-            target_col=TARGET_COL[target_mode],
+            target_col=target_col,
             task="regression",
             test_size=TEST_SIZE,
             cv_folds=5,
             random_seed=RANDOM_STATE,
         )
         log_reproducibility_metadata(device="cpu")
-        results, y_test, col_info = train_and_evaluate(
-            df,
-            target_mode=target_mode,
-            use_draft_pick=use_draft_pick,
+
+        bundles = train_selected_regression_models(
+            train_df, target_col, cfg,
+            selected_models=selected_models,
+            use_fixed_xgb_params=False,
             mlflow_ctx=mlflow_ctx,
-            xgb_cfg=xgb_cfg,
-            reg_cfg=reg_cfg,
-            prospect_context_mode=prospect_context_mode,
-            use_engineered_features=use_engineered_features,
-            use_pos_categorical=use_pos_categorical,
-            input_normalization_mode=input_normalization_mode,
         )
+
+        results = {}
+        for key, bundle in bundles.items():
+            y_pred = bundle.estimator.predict(test_df[bundle.feature_cols])
+            metrics = regression_metrics(y_test, y_pred)
+
+            mlflow.log_metrics({f"{key}__{k}": v for k, v in metrics.items()})
+
+            display = _DISPLAY_NAMES.get(key, key)
+            estimator_step = "xgb" if key == "xgboost" else key
+            results[display] = {
+                "pipe":             bundle.estimator,
+                "model":            bundle.estimator.named_steps.get(estimator_step),
+                "y_pred":           y_pred,
+                "r2":               metrics["r2"],
+                "rmse":             metrics["rmse"],
+                "mae":              metrics["mae"],
+                "alpha":            getattr(bundle.estimator.named_steps.get(estimator_step), "alpha_", None),
+                "importance_kind":  "xgb" if key == "xgboost" else "coef",
+                "estimator_step":   estimator_step,
+            }
+
+            print(f"{'='*40}")
+            print(f"  {display}")
+            print(f"  R²   = {metrics['r2']:.4f}")
+            print(f"  RMSE = {metrics['rmse']:.4f}")
+            print(f"  MAE  = {metrics['mae']:.4f}")
+
+        if "Lasso" in results:
+            print(f"\n{'='*40}\n  Lasso Feature Importances (non-zero only)\n{'='*40}")
+            print_lasso_coefficients(results["Lasso"]["pipe"], numeric_cols, categorical_cols, ordinal_cols)
+
         log_candidate_summary(results, task="regression")
         plot_results(results, y_test, col_info, target_mode=target_mode, plot_dir=mlflow_ctx.plot_dir)
+
     return results, y_test, col_info
 
 
