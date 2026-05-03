@@ -226,55 +226,60 @@ flowchart TD
 ```
 sport-prospect-grading/
 ├── src/
-│   ├── main.py                    # Entry point — CLI args, config loading, model dispatch
+│   ├── main.py                      # Entry point — CLI args, config loading, model dispatch
 │   ├── config/
-│   │   └── config.yaml            # Centralized config for all model types
+│   │   └── config.yaml              # Centralized config for all model types
 │   ├── models/
-│   │   ├── regression_model.py    # Lasso / Ridge / XGBoost regression
-│   │   ├── classification_model.py# LogisticL1 / LogisticL2 / XGBoost classification
-│   │   ├── text_model.py          # Transformer encoder on scouting reports
-│   │   └── multimodal_model.py    # Stats + scouting joint model
+│   │   ├── regression_model.py      # Lasso / Ridge / XGBoost regression
+│   │   ├── classification_model.py  # LogisticL1 / LogisticL2 / XGBoost classification
+│   │   ├── multimodal.py            # Probability stacking ensemble (OOF + meta-model)
+│   │   ├── multimodal_reporting.py  # Evaluation metrics and output tables for multimodal runs
+│   │   ├── probability.py           # Shared probability interface (BaseModelBundle, CDF conversion)
+│   │   ├── classification_inference.py  # Inference utilities for fitted classification models
+│   │   ├── text_model.py            # Transformer encoder on scouting reports
+│   │   └── interpret_text.py        # Occlusion, probes, log-odds, VADER correlations
 │   ├── data/
-│   │   ├── loader.py              # Tabular data loading, feature engineering, preprocessing
-│   │   ├── dataset.py             # PyTorch Dataset for text/multimodal models
-│   │   └── preprocessor.py        # Shared preprocessing utilities
+│   │   ├── loader.py                # Tabular data loading, feature engineering, preprocessing
+│   │   └── dataset.py               # PyTorch Dataset for text/multimodal models
 │   ├── training/
-│   │   ├── trainer.py             # Neural model training loop (grad clip, checkpointing)
-│   │   └── evaluate.py            # Metrics: MAE, RMSE, R², accuracy, ROC-AUC
+│   │   ├── splits.py                # Train/val/test splitting utilities
+│   │   └── evaluate.py              # Metrics: MAE, RMSE, R², accuracy, ROC-AUC
 │   └── utils/
-│       ├── device.py              # Auto-detects CPU / MPS / CUDA
-│       ├── features.py            # Feature name expansion and importance helpers
-│       ├── plotting.py            # Model summary and feature importance plots (local only)
-│       └── mlflow_utils.py        # MLflow context, run naming, logging helpers
+│       ├── device.py                # Auto-detects CPU / MPS / CUDA
+│       ├── features.py              # Feature name expansion and importance helpers
+│       ├── plotting.py              # Model summary and feature importance plots (local only)
+│       └── mlflow_utils.py          # MLflow context, run naming, logging helpers
 ├── data/
-│   ├── nba/                       # NBA master list and per-season stats
-│   ├── ncaa/                      # NCAA master list and annual stats
-│   └── scripts/                   # Data fetch, parse, and reconciliation scripts
-├── notebooks/
-│   └── 01_eda.ipynb
+│   ├── nba/                         # NBA master list and per-season stats
+│   ├── ncaa/                        # NCAA master list and annual stats
+│   ├── scouting/                    # Scouting report texts and player attribute CSVs
+│   └── scripts/                     # Data fetch, parse, and reconciliation scripts
 ├── outputs/
-│   └── plots/                     # Per-run local plot output (one subfolder per run name)
+│   └── plots/                       # Per-run local plot output (one subfolder per run name)
 ├── scripts/
 │   ├── start_mlflow_ui.sh
 │   └── start_mlflow_server.sh
-├── MLFLOW_LOGGING.md              # MLflow logging specification
+├── MLFLOW_LOGGING.md                # MLflow logging specification
 └── pyproject.toml
 ```
 
 #### `src/models/`
-- **`regression_model.py`**: Lasso/Ridge regression model predicting NBA PLUS_MINUS (best season) from final-year NCAA college stats. Uses Lasso for feature selection due to high multicollinearity.
+- **`regression_model.py`**: Lasso/Ridge/XGBoost regression predicting `nba_role_zscore` (or `plus_minus`) from final-year NCAA college stats.
+- **`classification_model.py`**: LogisticL1/LogisticL2/XGBoost classification predicting `prospect_tier` from NCAA stats.
+- **`multimodal.py`**: Probability stacking ensemble — trains base models via 5-fold OOF CV, builds a 16-column meta-feature matrix, and fits a logistic regression meta-model.
+- **`multimodal_reporting.py`**: Evaluation tables, per-class metrics, and output CSVs for multimodal runs.
+- **`probability.py`**: Shared `BaseModelBundle` interface: `predict_tier_proba()` for all base models, Gaussian CDF conversion for regression outputs, and post-hoc calibration utilities.
+- **`classification_inference.py`**: Inference utilities for applying fitted classification models to new data.
 - **`text_model.py`**: NLP encoder (ScoutingReportEncoder) for fine-tuning transformer models on scouting report texts. Pass `save_path=` to `train_and_evaluate_text_model` to persist weights for interpretability.
 - **`interpret_text.py`**: Probes, aggregated occlusion, corpus log-odds, VADER sentiment correlations, and `outputs/interpretability/REPORT.md` for all prediction heads.
-- **`multimodal_model.py`**: Combines NCAA stats features + scouting report embeddings for joint prediction.
 
 #### `src/training/`
-- **`trainer.py`**: Training loop for neural models with gradient clipping, checkpoint saving, and loss tracking.
-- **`evaluate.py`**: Evaluation metrics (MAE, RMSE, R², plus ranking metrics like precision@k).
+- **`splits.py`**: Train/val/test splitting utilities with stratified and chronological modes.
+- **`evaluate.py`**: Evaluation metrics (MAE, RMSE, R², accuracy, ROC-AUC, ordinal metrics).
 
 #### `src/data/`
+- **`loader.py`**: Tabular data loading, NCAA/NBA merging, feature engineering, and sklearn `ColumnTransformer` pipeline construction.
 - **`dataset.py`**: PyTorch Dataset classes (`ProspectStatsDataset`, `ScoutingReportDataset`) for loading NCAA stats and tokenized scouting reports.
-- **`preprocessor.py`**: Feature engineering and train/val/test splitting with StandardScaler for numerical features.
-- **`players.csv` / `players.jsonl`**: Master prospect data with scouting ratings and attributes.
 
 #### `src/utils/`
 - **`device.py`**: Utility to detect and log compute device (CPU/GPU).
@@ -285,16 +290,21 @@ sport-prospect-grading/
 ### Data Processing Scripts
 
 #### `data/scripts/`
-- **`fetch_nba_stats.py`**: Fetches season-level NBA stats (PLUS_MINUS, box scores) using nba-api for all players across draft classes.
+- **`fetch_nba_stats.py`**: Fetches season-level NBA stats using nba-api for all players across draft classes.
 - **`parse_ncaa_stats.py`**: Parses NCAA stats from raw data into structured DataFrames.
 - **`reconcile_master.py`**: Reconciles NCAA and NBA data to link prospects with their professional performance.
+- **`reconcile_from_ncaa_master.py`**: Re-derives the reconciled master list directly from `ncaa_master.csv`.
+- **`backfill_ncaa_stats.py`**: Backfills missing NCAA stats from ESPN box scores (~2 GB, ~2 min).
+- **`augment_new_seasons.py`**: Appends new draft-class seasons to the existing NCAA stats.
 - **`recover_nba_players.py`**: Recovers missing NBA players from the master list.
+- **`validate_recovered_players.py`**: Sanity-checks recovered player records against known data.
+- **`backfill_profile.py`**: Backfills player profile fields (height, position, etc.) from secondary sources.
 
 ### Data Directories
 
 #### `data/nba/`
 - **`nba_master.csv`**: Master list of NBA draft prospects mapped to professional performance.
-- **`nba_stats_best_season.csv`**: Best-season NBA stats (highest PLUS_MINUS) for each drafted prospect.
+- **`nba_stats_best_season.csv`**: Best-season NBA stats for each drafted prospect (composite scoring).
 - **`season_cache/`**: Season-by-season NBA stats (2009–10 through 2025–26).
 
 #### `data/ncaa/`
@@ -302,12 +312,13 @@ sport-prospect-grading/
 - **`ncaa_stats_master.csv`**: Aggregated NCAA statistics.
 - **`YYYY-ZZZZ.csv`**: Annual NCAA stats files.
 
+#### `data/scouting/`
+- **`players.csv` / `players.jsonl`**: Master prospect data with scouting ratings and attributes.
+- **`scouting_texts.txt`**: Raw scouting report text used by the text model.
+
 ### Configuration & Infrastructure
 
-- **`Makefile`**: Build rules for common tasks.
 - **`pyproject.toml`**: Project metadata and dependencies (PyTorch, Transformers, scikit-learn, MLflow, Weights & Biases).
-- **`docker/`**: Docker configurations for containerized GPU/CPU training environments.
-- **`notebooks/01_eda.ipynb`**: Exploratory data analysis notebook.
 - **`mlruns/`**: MLflow experiment tracking artifacts and model snapshots.
 ---
 
@@ -339,6 +350,7 @@ All models are launched through `src/main.py`. The `--model` flag selects the pi
 ```bash
 uv run python src/main.py --model regression
 uv run python src/main.py --model classification
+uv run python src/main.py --model multimodal
 uv run python src/main.py --model text
 ```
 
@@ -362,8 +374,11 @@ The `--run-name` flag is the recommended way to distinguish runs when comparing 
 uv run python src/main.py --model regression --run-name regression-baseline-no-pick
 uv run python src/main.py --model regression --run-name regression-with-pick
 
-# Label a classification run by target
-uv run python src/main.py --model classification --run-name clf-survived3yrs-v1
+# Label a classification run
+uv run python src/main.py --model classification --run-name clf-prospect-tier-v1
+
+# Label a multimodal stacking run
+uv run python src/main.py --model multimodal --run-name multimodal-lgb-xgb-v1
 ```
 
 ### Text model interpretability
@@ -384,14 +399,15 @@ uv run python -m src.models.interpret_text --checkpoint outputs/checkpoints/text
 
 Use `--retrain --checkpoint-out ...` to train and interpret in one step. Outputs land in `outputs/interpretability/`.
 
-### Jupyter Notebook
+### Auto-generated run names
+
 If `--run-name` is omitted, a name is auto-generated using the pattern:
 
 ```
 {model_type}-{target}-{YYYYMMDD-HHMMSS}-{user}-{git_sha}
 ```
 
-Example: `regression-plus_minus-20260423-143012-kincaid-c79bc0f`
+Example: `regression-nba_role_zscore-20260423-143012-kincaid-c79bc0f`
 
 The run name is used as:
 - The MLflow parent run name
@@ -408,22 +424,26 @@ The run name is used as:
 ```yaml
 model:
   regression:
-    target_mode: plus_minus       # only supported target
-    use_draft_pick: false         # set true to include draft pick position as a feature
+    target_mode: nba_role_zscore  # nba_role_zscore | plus_minus | composite_score
+    use_draft_pick: true          # set false to exclude draft pick position as a feature
     alpha_min: 1e-4               # Lasso/Ridge alpha search range (lower bound)
     alpha_max: 1e2                # Lasso/Ridge alpha search range (upper bound)
     alpha_steps: 100              # number of alpha candidates
-    max_iter: 10000               # Lasso max iterations
     cv_folds: 5                   # CV folds for Lasso and Ridge
     xgboost:
       n_estimators: [100, 200]    # grid search values
       max_depth: [2, 3]
       learning_rate: [0.05, 0.1]
-      subsample: [0.8]
+      subsample: [0.7, 0.9]
+      colsample_bytree: [0.7, 1.0]
+      min_child_weight: [3, 5, 10]
+      reg_alpha: [0, 0.1, 1]
+      reg_lambda: [1, 5, 10]
+      gamma: [0]
       cv_folds: 3                 # CV folds for XGBoost grid search
-      n_jobs: 1                    # XGBoost worker threads; keep 1 on macOS for stability
-      grid_n_jobs: 1               # GridSearchCV worker processes
-      pre_dispatch: 1              # Jobs queued ahead of active workers
+      n_jobs: 1                   # XGBoost worker threads; keep 1 on macOS for stability
+      grid_n_jobs: 1              # GridSearchCV worker processes
+      pre_dispatch: 1             # Jobs queued ahead of active workers
 ```
 
 Trains three models: **Lasso**, **Ridge**, **XGBoost**. Each gets its own nested MLflow run under the parent. XGBoost uses `GridSearchCV` over the values listed above.
@@ -433,20 +453,25 @@ Trains three models: **Lasso**, **Ridge**, **XGBoost**. Each gets its own nested
 ```yaml
 model:
   classification:
-    target_mode: survived_3yrs    # survived_3yrs | became_starter
+    target_mode: prospect_tier    # prospect_tier | became_starter
     use_draft_pick: false
     xgboost:
       n_estimators: [100, 200]
       max_depth: [2, 3]
       learning_rate: [0.05, 0.1]
-      subsample: [0.8]
+      subsample: [0.7, 0.9]
+      colsample_bytree: [1.0]
+      min_child_weight: [3, 10]
+      reg_alpha: [0, 0.1]
+      reg_lambda: [1, 5]
+      gamma: [0]
       cv_folds: 3
       n_jobs: 1
       grid_n_jobs: 1
       pre_dispatch: 1
 ```
 
-Trains three models: **LogisticL1**, **LogisticL2**, **XGBoost**. Target can be switched to `became_starter` to change the binary outcome being predicted.
+Trains three models: **LogisticL1**, **LogisticL2**, **XGBoost**. The default target is `prospect_tier` (4-class: Bust/Bench/Starter/Star). Switch to `became_starter` for a binary outcome.
 
 On macOS, XGBoost needs an OpenMP runtime (`libomp.dylib`). The CLI will automatically restart tabular runs with `DYLD_FALLBACK_LIBRARY_PATH` when it finds `libomp` in common Homebrew or Conda locations.
 
