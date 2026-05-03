@@ -1,12 +1,72 @@
 # NBA Draft ML Research
 
-## Goal
+## Project Summary
 
-Predict NBA draft success using:
+This is an ML research system for predicting NBA draft prospect success using college basketball data. The goal is to estimate how well an NCAA prospect will perform professionally before they are drafted.
 
-- College statistics (regression and classification)
-- Scouting reports (NLP text model)
-- Combined stats + scouting (multimodal model)
+**Three model tiers:**
+
+1. **Tabular models** — Lasso, Ridge, and XGBoost trained on NCAA per-game statistics (points, rebounds, assists, shooting percentages, etc.) plus engineered features (true shooting %, assist-to-turnover ratio, usage proxy, position-relative height, team difficulty score).
+2. **Text model** — A DistilBERT-based encoder (`ScoutingReportEncoder`) fine-tuned on scouting report texts, producing a 128-dim embedding with regression and binary classification heads.
+3. **Multimodal stacking (PSM)** — A Probability Stacking Model that trains base classifiers via out-of-fold (OOF) cross-validation, collects their held-out probability vectors, and fits a logistic regression meta-model to optimally combine all signals.
+
+**Prediction targets:**
+
+| Target | Type | Description |
+|---|---|---|
+| `plus_minus` | Regression | Best-season NBA PLUS_MINUS |
+| `composite_score` | Regression | Weighted blend of NBA minutes, games, and plus-minus |
+| `nba_role_zscore` | Regression | Z-scored aggregate across NBA box-score stats |
+| `prospect_tier` | 4-class ordinal | Bust / Bench / Starter / Star (derived from `composite_score` percentiles) |
+| `became_starter` | Binary | Started 3+ games in first 3 NBA seasons |
+| `survived_3yrs` | Binary | Remained on an NBA roster for 3+ seasons |
+
+**Data sources:**
+
+- `data/ncaa/` — Per-player, per-season NCAA stats (2008–2021+)
+- `data/nba/` — Season-by-season NBA stats (2009–10 through 2025–26), draft prospect master list
+- `data/scouting/` — Scouting report texts and structured attribute ratings
+
+---
+
+## Codebase Map
+
+### Architecture Flow
+
+```mermaid
+flowchart TD
+    NCAA["NCAA Stats\ndata/ncaa/"]
+    NBA["NBA Stats\ndata/nba/"]
+    Scouting["Scouting Reports\ndata/scouting/"]
+
+    NCAA --> Loader["loader.py\nFeature Engineering"]
+    NBA --> Loader
+    Scouting --> Dataset["dataset.py\nTokenization"]
+
+    Loader --> Tab
+    Dataset --> Text
+
+    subgraph Tab["Tabular Models"]
+        Lasso["Lasso"]
+        Ridge["Ridge"]
+        XGB["XGBoost"]
+    end
+
+    subgraph Text["Text Model"]
+        BERT["ScoutingReportEncoder\nDistilBERT + 128-dim head"]
+    end
+
+    Tab -->|"OOF class probabilities"| PSM["Probability Stacking Model\nmultimodal.py\nLogistic Meta-Model"]
+    Text -->|"embeddings / predictions"| PSM
+
+    Tab --> MLflow["MLflow\nExperiment Tracking"]
+    Text --> MLflow
+    PSM --> MLflow
+
+    Tab --> Plots["outputs/plots/"]
+    Text --> Interp["outputs/interpretability/"]
+    PSM --> MultiOut["outputs/multimodal/"]
+```
 
 ---
 
@@ -15,61 +75,75 @@ Predict NBA draft success using:
 ```
 sport-prospect-grading/
 ├── src/
-│   ├── main.py                    # Entry point — CLI args, config loading, model dispatch
+│   ├── main.py                         # Entry point — CLI args, config loading, model dispatch
 │   ├── config/
-│   │   └── config.yaml            # Centralized config for all model types
+│   │   └── config.yaml                 # Centralized config for all model types
 │   ├── models/
-│   │   ├── regression_model.py    # Lasso / Ridge / XGBoost regression
-│   │   ├── classification_model.py# LogisticL1 / LogisticL2 / XGBoost classification
-│   │   ├── text_model.py          # Transformer encoder on scouting reports
-│   │   └── multimodal_model.py    # Stats + scouting joint model
+│   │   ├── regression_model.py         # Lasso / Ridge / XGBoost regression
+│   │   ├── classification_model.py     # LogisticL1 / LogisticL2 / XGBoost classification
+│   │   ├── text_model.py               # DistilBERT encoder (ScoutingReportEncoder)
+│   │   ├── interpret_text.py           # Text model interpretability (probes, occlusion, log-odds)
+│   │   ├── multimodal.py               # Probability Stacking Model (OOF + meta-model)
+│   │   ├── classification_inference.py # Classification prediction interface
+│   │   ├── probability.py              # Probability utilities and calibration
+│   │   └── multimodal_reporting.py     # Multimodal output formatting and diagnostics
 │   ├── data/
-│   │   ├── loader.py              # Tabular data loading, feature engineering, preprocessing
-│   │   ├── dataset.py             # PyTorch Dataset for text/multimodal models
-│   │   └── preprocessor.py        # Shared preprocessing utilities
+│   │   ├── loader.py                   # Tabular data loading, feature engineering, preprocessing
+│   │   └── dataset.py                  # PyTorch Dataset classes for text/multimodal models
 │   ├── training/
-│   │   ├── trainer.py             # Neural model training loop (grad clip, checkpointing)
-│   │   └── evaluate.py            # Metrics: MAE, RMSE, R², accuracy, ROC-AUC
+│   │   ├── trainer.py                  # Neural model training loop (grad clip, checkpointing)
+│   │   ├── evaluate.py                 # Metrics: MAE, RMSE, R², accuracy, ROC-AUC, ordinal
+│   │   └── splits.py                   # Random, chronological, and repeated stratified CV splits
 │   └── utils/
-│       ├── device.py              # Auto-detects CPU / MPS / CUDA
-│       ├── features.py            # Feature name expansion and importance helpers
-│       ├── plotting.py            # Model summary and feature importance plots (local only)
-│       └── mlflow_utils.py        # MLflow context, run naming, logging helpers
+│       ├── device.py                   # Auto-detects CPU / MPS / CUDA
+│       ├── features.py                 # Feature name expansion and importance helpers
+│       ├── plotting.py                 # Model summary and feature importance plots (local only)
+│       └── mlflow_utils.py             # MLflow context, run naming, logging helpers
 ├── data/
-│   ├── nba/                       # NBA master list and per-season stats
-│   ├── ncaa/                      # NCAA master list and annual stats
-│   └── scripts/                   # Data fetch, parse, and reconciliation scripts
+│   ├── nba/                            # NBA master list and per-season stats
+│   ├── ncaa/                           # NCAA master list and annual stats
+│   ├── scouting/                       # Scouting report texts and structured ratings
+│   └── scripts/                        # Data fetch, parse, and reconciliation scripts
 ├── notebooks/
 │   └── 01_eda.ipynb
 ├── outputs/
-│   └── plots/                     # Per-run local plot output (one subfolder per run name)
+│   ├── plots/                          # Per-run local plot output (one subfolder per run name)
+│   ├── interpretability/               # Text model interpretability outputs
+│   └── multimodal/                     # Multimodal run outputs and diagnostics
 ├── scripts/
 │   ├── start_mlflow_ui.sh
 │   └── start_mlflow_server.sh
-├── MLFLOW_LOGGING.md              # MLflow logging specification
+├── MLFLOW_LOGGING.md                   # MLflow logging specification
 └── pyproject.toml
 ```
 
 #### `src/models/`
-- **`regression_model.py`**: Lasso/Ridge regression model predicting NBA PLUS_MINUS (best season) from final-year NCAA college stats. Uses Lasso for feature selection due to high multicollinearity.
-- **`text_model.py`**: NLP encoder (ScoutingReportEncoder) for fine-tuning transformer models on scouting report texts. Pass `save_path=` to `train_and_evaluate_text_model` to persist weights for interpretability.
+- **`regression_model.py`**: Trains Lasso, Ridge, and XGBoost regressors on NCAA stats. Lasso provides feature selection via L1 sparsity; XGBoost uses GridSearchCV.
+- **`classification_model.py`**: Trains LogisticL1, LogisticL2, and XGBoost classifiers predicting `prospect_tier`, `became_starter`, or `survived_3yrs`. Supports threshold tuning and optional probability calibration.
+- **`text_model.py`**: `ScoutingReportEncoder` — DistilBERT base with a 128-dim projection head and multi-task output heads (regression + binary classification). Pass `save_path=` to persist weights for interpretability.
 - **`interpret_text.py`**: Probes, aggregated occlusion, corpus log-odds, VADER sentiment correlations, and `outputs/interpretability/REPORT.md` for all prediction heads.
-- **`multimodal_model.py`**: Combines NCAA stats features + scouting report embeddings for joint prediction.
+- **`multimodal.py`**: Probability Stacking Model (PSM) — trains base models via stratified K-fold OOF, concatenates held-out class probability vectors, fits a logistic regression meta-model.
+- **`classification_inference.py`**: Prediction interface for the classification pipeline.
+- **`probability.py`**: Probability utilities, Brier score / log-loss calibration helpers.
+- **`multimodal_reporting.py`**: Formats and writes multimodal run diagnostics and summary outputs.
 
 #### `src/training/`
-- **`trainer.py`**: Training loop for neural models with gradient clipping, checkpoint saving, and loss tracking.
-- **`evaluate.py`**: Evaluation metrics (MAE, RMSE, R², plus ranking metrics like precision@k).
+- **`trainer.py`**: Training loop for neural models with gradient clipping, checkpoint saving, and early stopping.
+- **`evaluate.py`**: Regression metrics (MAE, RMSE, R²), classification metrics (accuracy, balanced accuracy, ROC-AUC, macro F1), and ordinal metrics (within-one accuracy, distance-weighted accuracy, quadratic weighted kappa).
+- **`splits.py`**: `get_random_split()`, `get_chronological_split()`, `get_repeated_stratified_cv()`.
 
 #### `src/data/`
-- **`dataset.py`**: PyTorch Dataset classes (`ProspectStatsDataset`, `ScoutingReportDataset`) for loading NCAA stats and tokenized scouting reports.
-- **`preprocessor.py`**: Feature engineering and train/val/test splitting with StandardScaler for numerical features.
-- **`players.csv` / `players.jsonl`**: Master prospect data with scouting ratings and attributes.
+- **`loader.py`**: Loads and merges NCAA/NBA CSVs, engineers all features (shooting efficiency, usage proxy, team difficulty, position-relative height), applies StandardScaler + OneHotEncoder.
+- **`dataset.py`**: PyTorch Dataset classes — `ProspectStatsDataset` (tabular), `ScoutingReportDataset` (tokenized text), `MultimodalProspectDataset` (combined).
 
 #### `src/utils/`
-- **`device.py`**: Utility to detect and log compute device (CPU/GPU).
+- **`device.py`**: Auto-detects and logs compute device (CUDA > MPS > CPU); respects `DEVICE` env var.
+- **`features.py`**: Feature name expansion, Lasso coefficient display, XGBoost feature importance ranking.
+- **`plotting.py`**: Feature importance, model comparison, and results plots. Uses Matplotlib Agg backend (non-interactive).
+- **`mlflow_utils.py`**: Parent + nested child run structure, parameter/metric/artifact logging helpers.
 
 #### `src/config/`
-- **`config.yaml`**: Centralized YAML configuration for model type, training hyperparameters, data paths, and output directory.
+- **`config.yaml`**: Centralized YAML configuration for model type, target, feature flags, hyperparameter search ranges, training settings, data paths, and MLflow tracking URI.
 
 ### Data Processing Scripts
 
@@ -78,12 +152,18 @@ sport-prospect-grading/
 - **`parse_ncaa_stats.py`**: Parses NCAA stats from raw data into structured DataFrames.
 - **`reconcile_master.py`**: Reconciles NCAA and NBA data to link prospects with their professional performance.
 - **`recover_nba_players.py`**: Recovers missing NBA players from the master list.
+- **`backfill_ncaa_stats.py`**: Fills gaps in NCAA stats from ESPN box scores.
+- **`reconcile_from_ncaa_master.py`**: Alternative reconciliation path from the NCAA master list.
+- **`backfill_profile.py`**: Augments player profiles with additional data.
+- **`augment_new_seasons.py`**: Extends the dataset with new season data.
+- **`validate_recovered_players.py`**: Validates player recovery output.
 
 ### Data Directories
 
 #### `data/nba/`
 - **`nba_master.csv`**: Master list of NBA draft prospects mapped to professional performance.
 - **`nba_stats_best_season.csv`**: Best-season NBA stats (highest PLUS_MINUS) for each drafted prospect.
+- **`nba_stats_best_season_vorp.csv`**: Best-season NBA stats using VORP as the selection criterion.
 - **`season_cache/`**: Season-by-season NBA stats (2009–10 through 2025–26).
 
 #### `data/ncaa/`
@@ -91,11 +171,13 @@ sport-prospect-grading/
 - **`ncaa_stats_master.csv`**: Aggregated NCAA statistics.
 - **`YYYY-ZZZZ.csv`**: Annual NCAA stats files.
 
+#### `data/scouting/`
+- **`players.csv` / `players.jsonl`**: Structured scouting ratings and player attributes.
+- **`scouting_texts.txt`**: Raw scouting report texts used to train the text model.
+
 ### Configuration & Infrastructure
 
-- **`Makefile`**: Build rules for common tasks.
-- **`pyproject.toml`**: Project metadata and dependencies (PyTorch, Transformers, scikit-learn, MLflow, Weights & Biases).
-- **`docker/`**: Docker configurations for containerized GPU/CPU training environments.
+- **`pyproject.toml`**: Project metadata and dependencies (PyTorch, Transformers, scikit-learn, MLflow, nba-api).
 - **`notebooks/01_eda.ipynb`**: Exploratory data analysis notebook.
 - **`mlruns/`**: MLflow experiment tracking artifacts and model snapshots.
 ---
