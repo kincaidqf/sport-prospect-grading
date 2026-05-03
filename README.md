@@ -926,7 +926,7 @@ well as the run instructions.
 
 ## Summary
 
-Claude was used as a **coding assistant and documentation generator** throughout
+I (Kincaid) used claude as a coding assistant and documentation generator throughout
 this project. The workflow was consistently:
 
 1. I analyzed model results, identified what to change, and decided the approach.
