@@ -10,6 +10,217 @@ Predict NBA draft success using:
 
 ---
 
+## Model Architecture
+
+This project uses a **probability stacking ensemble** (PSM). Tabular classification and regression base models are trained via out-of-fold cross-validation; their probability outputs are stacked into a meta-feature matrix that a logistic regression meta-model learns to combine.
+
+### Prospect Tier Labels
+
+Tiers are derived from each player's `nba_role_zscore` — a composite of NBA performance statistics:
+
+| Tier | Label | z-score |
+|------|-------|---------|
+| 0 | Bust | < −0.5 |
+| 1 | Bench | −0.5 to 0.5 |
+| 2 | Starter | 0.5 to 1.5 |
+| 3 | Star | > 1.5 |
+
+---
+
+### Full System Overview
+
+```mermaid
+flowchart TD
+    subgraph DATA["Data Layer"]
+        NCAA["NCAA Stats\nPer-game averages, shooting splits,\nheight, class year, school tier"]
+        NBA["NBA Outcomes\nrole z-score converted to tier label"]
+    end
+
+    subgraph PREP["Preprocessing Pipeline"]
+        MERGE["Merge and Label\nncaa_master joined with nba_master"]
+        FE["Feature Engineering\nPer-game normalization, team difficulty score,\nprospect context score, height deviation by position"]
+        PIPE["sklearn ColumnTransformer\nMedian imputation → StandardScaler\nOptional: one-hot position, ordinal class year"]
+    end
+
+    subgraph BASE["Base Models — 4 total, trained via 5-Fold OOF CV"]
+        subgraph CLF["Classification Branch"]
+            LR["Logistic Regression\nsoftmax output, log loss"]
+            XGB_C["XGBoost Classifier\ngradient boosted trees"]
+        end
+        subgraph REG["Regression Branch"]
+            RIDGE["Ridge Regression\nMSE + L2 penalty"]
+            XGB_R["XGBoost Regressor\ngradient boosted trees"]
+        end
+    end
+
+    subgraph PROBA["Uniform Probability Interface — all models output 4-class probabilities"]
+        CLF_P["Classification\npredict_proba() directly"]
+        REG_P["Regression\nz-score prediction\n→ Gaussian CDF at thresholds -0.5, 0.5, 1.5\n→ 4-class tier probabilities"]
+    end
+
+    META["Meta-Feature Matrix: 16 columns\n4 models × p_bust, p_bench, p_starter, p_star"]
+    STACKER["Logistic Regression Meta-Model\ntrained on OOF meta-features"]
+    OUT["Final Prediction\nBust / Bench / Starter / Star  +  per-class confidence"]
+
+    DATA --> PREP
+    PREP --> BASE
+    LR --> CLF_P
+    XGB_C --> CLF_P
+    RIDGE --> REG_P
+    XGB_R --> REG_P
+    CLF_P --> META
+    REG_P --> META
+    META --> STACKER
+    STACKER --> OUT
+```
+
+---
+
+### Logistic Regression Classifier
+
+A linear model that learns a weighted combination of NCAA features and applies softmax to assign each prospect to one of four tiers. Two regularization variants are trained: **L1** (SAGA solver, drives unimportant feature weights to zero) and **L2** (LBFGS solver, shrinks all weights smoothly).
+
+```mermaid
+flowchart TD
+    subgraph INPUT["Input Features — preprocessed"]
+        FEAT["PPG, RPG, APG, BPG, SPG\nFG%, FT%, 3P%\nHeight Deviation from position average\nTeam Difficulty Score, Prospect Context Score\n~15 to 25 numeric features"]
+    end
+
+    subgraph PREP["Preprocessing Pipeline"]
+        IMP["Median Imputation\nfills missing stats with column median"]
+        SCALE["StandardScaler\nz = (x - mean) / std\ncenters and scales each feature"]
+    end
+
+    subgraph MODEL["LogisticRegressionCV"]
+        LINEAR["Linear combination per class k\nz_k = w_k dot x + b_k\none weight vector per tier"]
+        SOFT["Softmax Activation\nP(k) = exp(z_k) / sum over j of exp(z_j)\nConverts raw class scores to probabilities summing to 1"]
+        subgraph REG["Regularization — penalizes large weights to prevent overfitting"]
+            L1["L1 variant  (SAGA solver)\nPushes weak feature weights to exactly zero\nautomatically selects relevant features"]
+            L2["L2 variant  (LBFGS solver)\nShrinks all weights proportionally\nsmoother, more stable solution"]
+        end
+        LOSS["Loss: Cross-Entropy\nL = -sum over k of  y_k * log P(k)\nMinimized during training"]
+        CV["Inner 5-Fold Cross-Validation\nSearches 20 C values in 0.001 to 100\nC = 1 / regularization strength\nSelects best C automatically"]
+    end
+
+    subgraph CAL["Optional Post-hoc Calibration: Platt Scaling"]
+        PLATT["Sigmoid function fit on held-out 15% of training data\nRecalibrates confidence scores without refitting the base model"]
+    end
+
+    OUT["Output: p_bust, p_bench, p_starter, p_star\nFour probabilities summing to 1.0"]
+
+    INPUT --> PREP
+    PREP --> LINEAR
+    LINEAR --> SOFT
+    L1 -.->|"penalizes weights during training"| LINEAR
+    L2 -.->|"penalizes weights during training"| LINEAR
+    CV -.->|"selects best C"| MODEL
+    SOFT --> LOSS
+    SOFT --> CAL
+    CAL --> OUT
+```
+
+---
+
+### XGBoost Classifier
+
+An ensemble of shallow decision trees trained **sequentially** via gradient boosting. Each new tree corrects the residual errors of all previous trees, producing a powerful non-linear classifier without requiring manual feature engineering.
+
+```mermaid
+flowchart TD
+    subgraph INPUT["Input Features — preprocessed"]
+        FEAT["Same NCAA features as Logistic Regression"]
+    end
+
+    subgraph PREP["Preprocessing Pipeline"]
+        IMP["Median Imputation"]
+        SCALE["StandardScaler"]
+    end
+
+    subgraph MODEL["XGBClassifier — GridSearchCV 3-fold CV"]
+        subgraph BOOST["Gradient Boosting Ensemble"]
+            T1["Tree 1\nInitial rough prediction for all classes"]
+            T2["Tree 2\nFits residual errors left by Tree 1"]
+            TN["Tree N  (up to 200)\nEach tree corrects all previous errors\nTrees are shallow: max_depth 2 to 3"]
+        end
+
+        subgraph HP["Hyperparameters — grid-searched"]
+            H1["max_depth: 2 to 3\nLimits tree depth to prevent overfitting"]
+            H2["learning_rate: 0.05 to 0.1\nShrinks each tree contribution\nsmaller = more trees needed, less overfit"]
+            H3["subsample: 0.7 to 0.9\nRandom row sampling per tree\nreduces correlation between trees"]
+            H4["L1 reg_alpha + L2 reg_lambda\nmin_child_weight: 3 to 10\nfurther prevent overfitting on small leaves"]
+        end
+
+        PROB["objective: multi:softprob\nSoftmax over summed tree outputs\nProduces calibrated class probabilities"]
+        LOSS["Eval metric: mlogloss  (multiclass cross-entropy)\nCV scoring: macro-averaged F1\nFeature importance computed via SHAP"]
+    end
+
+    OUT["Output: p_bust, p_bench, p_starter, p_star"]
+
+    INPUT --> PREP
+    PREP --> T1
+    T1 --> T2
+    T2 --> TN
+    TN --> PROB
+    HP -.->|"controls tree structure and regularization"| BOOST
+    PROB --> LOSS
+    PROB --> OUT
+```
+
+---
+
+### Multi-Modal Probability Stacking
+
+The multi-modal model is a **stacking ensemble**. Each base model independently produces 4-class probability estimates from the same NCAA input features. These are concatenated into a 16-column meta-feature matrix, and a logistic regression meta-model learns the optimal weighted combination across all base models.
+
+Training uses **out-of-fold (OOF) cross-validation** so the meta-model trains on predictions the base models made on data they never saw during their own training — this prevents information leakage.
+
+```mermaid
+flowchart TD
+    subgraph TRAIN["Full Labeled Training Set"]
+        TD["NCAA Stats merged with NBA Outcomes\nprospect_tier: 0=Bust  1=Bench  2=Starter  3=Star"]
+    end
+
+    subgraph OOF["Phase 1 — Out-of-Fold Training: 5-Fold Stratified CV"]
+        FOLDS["Each fold splits training data:\n80% train  split further into  85% core + 15% calibration hold-out\n20% validation  used only for scoring\nBase models train on core+calibration, predict on validation\nOOF probabilities collected across all 5 folds covering the full training set"]
+    end
+
+    subgraph BASE["Base Models — each outputs 4 probability columns per sample"]
+        subgraph CLF["Classification Branch — predict_proba() called directly"]
+            LR_B["Logistic Regression L2\npredict_proba() outputs p_bust, p_bench, p_starter, p_star"]
+            XGB_B["XGBoost Classifier\npredict_proba() outputs p_bust, p_bench, p_starter, p_star"]
+        end
+        subgraph REG["Regression Branch — z-score converted to probabilities via Gaussian CDF"]
+            RIDGE_B["Ridge Regression\npredict() → nba_role_zscore\nGaussian CDF evaluated at thresholds -0.5, 0.5, 1.5\n→ p_bust, p_bench, p_starter, p_star"]
+            XGBR_B["XGBoost Regressor\npredict() → nba_role_zscore\nGaussian CDF evaluated at thresholds -0.5, 0.5, 1.5\n→ p_bust, p_bench, p_starter, p_star"]
+        end
+    end
+
+    subgraph META["Meta-Feature Matrix: N samples × 16 columns"]
+        MF["clf__logistic_l2:  p_bust  p_bench  p_starter  p_star\nclf__xgboost:     p_bust  p_bench  p_starter  p_star\nreg__ridge:       p_bust  p_bench  p_starter  p_star\nreg__xgboost:     p_bust  p_bench  p_starter  p_star"]
+    end
+
+    subgraph STACK["Phase 2 — Logistic Regression Meta-Model (Stacker)"]
+        SLOG["Trained on OOF meta-features\nclass_weight=balanced handles class imbalance\nmax_iter=5000"]
+        SSOFT["Softmax → final 4-class probability distribution"]
+        SLOSS["Loss: Cross-Entropy\nOOF predictions prevent base-model leakage\n(meta-model only sees out-of-sample base predictions)"]
+    end
+
+    OUT["Final Output\nprospect_tier prediction  +  per-class confidence scores"]
+
+    TRAIN --> OOF
+    OOF --> BASE
+    LR_B --> MF
+    XGB_B --> MF
+    RIDGE_B --> MF
+    XGBR_B --> MF
+    MF --> SLOG
+    SLOG --> SSOFT
+    SSOFT --> SLOSS
+    SSOFT --> OUT
+```
+
+---
+
 ## Project Structure
 
 ```
