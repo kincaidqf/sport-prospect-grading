@@ -24,6 +24,7 @@ import pandas as pd
 import torch
 from src.models.text_model import (
     PROJECT_ROOT,
+    TARGET,
     ScoutingReportEncoder,
     TextProspectPredictor,
     load_text_data,
@@ -32,7 +33,8 @@ from src.models.text_model import (
 
 HEAD_KEYS = ("vorp", "star", "survived", "starter")
 HEAD_LABELS = {
-    "vorp": "VORP (regression)",
+    # Key "vorp" is historical; regression target column comes from text_model.TARGET.
+    "vorp": f"{TARGET} (regression)",
     "star": "is_star",
     "survived": "survived_3yrs",
     "starter": "became_starter",
@@ -95,7 +97,7 @@ def score_texts(
     max_length: int = 256,
     batch_size: int = 32,
 ) -> dict[str, np.ndarray]:
-    """Return per-head scores: VORP in original units; classifiers as sigmoid probabilities."""
+    """Return per-head scores: regression target in original units; classifiers as sigmoid probabilities."""
     if not texts:
         empty = np.array([], dtype=np.float64)
         return {h: empty.copy() for h in HEAD_KEYS}

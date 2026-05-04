@@ -186,9 +186,10 @@ class TextProspectPredictor(nn.Module):
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SCOUTING_PATH = os.path.join(PROJECT_ROOT, "data", "scouting", "players.csv")
-NBA_PATH = os.path.join(PROJECT_ROOT, "data", "nba", "nba_stats_best_season_vorp.csv")
+NBA_PATH = os.path.join(PROJECT_ROOT, "data", "nba", "nba_stats_best_season_darko.csv")
 SEASON_CACHE_DIR = os.path.join(PROJECT_ROOT, "data", "nba", "season_cache")
-TARGET = "VORP"
+# DPM = DARKO total from databallr (see data/scripts/fetch_nba_stats.py).
+TARGET = "DPM"
 
 def _clean_player_name(name: str) -> str:
     """Normalize scouting CSV names like '2 - KJ Simpson' to plain player names."""
@@ -846,9 +847,9 @@ def _plot_text_results(
     upperLim = max(abs(float(np.max(y_true))), abs(float(np.max(y_pred)))) + 1
     bottomLim = min(float(np.min(y_true)), float(np.min(y_pred))) - 1
     plt.plot([bottomLim, upperLim], [bottomLim, upperLim], "r--", linewidth=1, label="Perfect prediction")
-    plt.xlabel("Actual VORP")
-    plt.ylabel("Predicted VORP")
-    plt.title("Text Model: Scouting Report to NBA VORP")
+    plt.xlabel("Actual DPM (DARKO)")
+    plt.ylabel("Predicted DPM (DARKO)")
+    plt.title("Text Model: Scouting Report to DARKO DPM")
     plt.legend(fontsize=8)
     plt.xlim(bottomLim, upperLim)
     plt.ylim(bottomLim, upperLim)
