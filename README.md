@@ -503,8 +503,8 @@ model:
 training:
   batch_size: 32
   lr: 1e-3
-  epochs: 50
-  early_stopping_patience: 10
+  epochs: 10
+  early_stopping_patience: 3
 ```
 
 ### Shared training settings
@@ -514,8 +514,8 @@ training:
   batch_size: 32
   lr: 1e-3
   weight_decay: 1e-4
-  epochs: 50
-  early_stopping_patience: 10
+  epochs: 10
+  early_stopping_patience: 3
   grad_clip: 1.0
   seed: 42
 ```

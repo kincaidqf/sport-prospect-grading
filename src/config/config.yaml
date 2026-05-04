@@ -76,15 +76,17 @@ model:
   text:
     pretrained: "distilbert-base-uncased"
     output_dim: 128
-    max_length: 512
+    max_length: 256
     freeze_base: false
+    regression_target_col: nba_role_zscore
+    tier_proba_csv_path: null  # e.g. outputs/text_tier_proba_test.csv — multimodal meta-features
 
 training:
-  batch_size: 32
+  batch_size: 48
   lr: 1e-3
   weight_decay: 1e-4
-  epochs: 50
-  early_stopping_patience: 10
+  epochs: 10
+  early_stopping_patience: 3
   grad_clip: 1.0
   seed: 42
 
