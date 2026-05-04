@@ -133,7 +133,7 @@ def main() -> None:
             classification_target_col=text_cfg.get("classification_target_col"),
             num_classes=int(text_cfg.get("num_classes", 4)),
             batch_size=int(train_cfg.get("batch_size", 32)),
-            epochs=int(train_cfg.get("epochs", 3)),
+            epochs=int(train_cfg.get("epochs", 10)),
             lr=float(train_cfg.get("lr", 1e-3)),
             cfg=cfg,
             run_name=args.run_name,

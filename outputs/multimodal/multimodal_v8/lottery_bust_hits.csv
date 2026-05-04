@@ -1,0 +1,3 @@
+Name,draft_year,draft_pick,actual_tier,pred_tier,actual_tier_label,pred_tier_label,confidence,p_bust,p_bench,p_starter,p_star,ordinal_error,within_one,distance_weighted_credit,expected_class,expected_class_error
+Mfiondu Kabengele,2019,13,0,1,bust,bench,0.3027,0.24,0.3027,0.3003,0.157,1,True,0.6667,1.3744,1.3744
+Skal Labissiere,2016,14,1,1,bench,bench,0.2649,0.2473,0.2649,0.2455,0.2423,0,True,1.0,1.4828,0.4828
