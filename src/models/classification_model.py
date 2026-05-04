@@ -241,7 +241,7 @@ def train_selected_classification_models(
                         "n_train": len(X_train),
                         "use_fixed_xgb_params": use_fixed_xgb_params,
                     })
-                    mlflow.sklearn.log_model(pipe, artifact_path=key)
+                    mlflow.sklearn.log_model(pipe, name=key)
 
             elif key == "xgboost":
                 if use_fixed_xgb_params:
@@ -266,7 +266,7 @@ def train_selected_classification_models(
                             "n_train": len(X_train),
                             **fixed,
                         })
-                        mlflow.sklearn.log_model(pipe, artifact_path=key)
+                        mlflow.sklearn.log_model(pipe, name=key)
                 else:
                     param_grid = {
                         "xgb__n_estimators":     xgb_cfg.get("n_estimators",     [100, 200]),
@@ -309,7 +309,7 @@ def train_selected_classification_models(
                             **{f"grid_{k.replace('xgb__','')}": str(v) for k, v in param_grid.items()},
                         })
                         log_xgb_importances(pipe, numeric_cols, categorical_cols, ordinal_cols)
-                        mlflow.sklearn.log_model(pipe, artifact_path=key)
+                        mlflow.sklearn.log_model(pipe, name=key)
 
                     print(f"\n{'='*40}\n  XGBoost Feature Importances (top 10)\n{'='*40}")
                     print_xgb_importances(pipe, numeric_cols, categorical_cols, ordinal_cols)
@@ -445,7 +445,7 @@ def _run_repeated_cv(
                 pipe.fit(X_all, y_all, xgb__sample_weight=sw_all)
             else:
                 pipe.fit(X_all, y_all)
-            mlflow.sklearn.log_model(pipe, artifact_path=name.lower())
+            mlflow.sklearn.log_model(pipe, name=name.lower())
             results[name] = {
                 "pipe": pipe,
                 "y_pred": None,
@@ -537,7 +537,7 @@ def _run_classification(
                 "use_draft_pick": use_draft_pick,
             })
             mlflow.log_metrics(metrics)
-            mlflow.sklearn.log_model(pipe, artifact_path=name.lower())
+            mlflow.sklearn.log_model(pipe, name=name.lower())
 
             results[name] = {
                 "pipe": pipe,
@@ -638,7 +638,7 @@ def _run_classification(
             })
             mlflow.log_metrics(metrics_xgb)
             log_xgb_importances(best, numeric_cols, categorical_cols, ordinal_cols)
-            mlflow.sklearn.log_model(best, artifact_path="xgboost")
+            mlflow.sklearn.log_model(best, name="xgboost")
 
             results["XGBoost"] = {
                 "pipe": best,
@@ -824,6 +824,8 @@ def _plot_classification(results, y_test, target_mode, plot_dir):
             res["y_pred"],
             display_labels=display_labels,
             ax=axes[0][col_idx],
+            normalize="true",
+            values_format=".0%",
         )
         axes[0][col_idx].set_title(
             f"{name}\nAcc={res['accuracy']:.3f}  F1={f1_macro:.3f}  BalAcc={ba:.3f}"

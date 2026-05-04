@@ -319,6 +319,6 @@ def log_candidate_summary(
         tmp_path = f.name
 
     try:
-        mlflow.log_artifact(tmp_path, artifact_path="summary")
+        mlflow.log_artifact(tmp_path, name="summary")
     finally:
         os.unlink(tmp_path)

@@ -204,7 +204,7 @@ def train_selected_regression_models(
                     })
                     coef_df = get_lasso_coef_df(pipe, numeric_cols, categorical_cols, ordinal_cols)
                     mlflow.log_metric("n_nonzero_features", len(coef_df))
-                    mlflow.sklearn.log_model(pipe, artifact_path=key)
+                    mlflow.sklearn.log_model(pipe, name=key)
 
             elif key == "ridge":
                 model = RidgeCV(alphas=alphas, cv=linear_cv_folds)
@@ -220,7 +220,7 @@ def train_selected_regression_models(
                         "use_draft_pick": use_draft_pick,
                         "use_fixed_xgb_params": use_fixed_xgb_params,
                     })
-                    mlflow.sklearn.log_model(pipe, artifact_path=key)
+                    mlflow.sklearn.log_model(pipe, name=key)
 
             elif key == "xgboost":
                 if use_fixed_xgb_params:
@@ -239,7 +239,7 @@ def train_selected_regression_models(
                             "use_fixed_xgb_params": True, "n_train": len(X_train),
                             **fixed,
                         })
-                        mlflow.sklearn.log_model(pipe, artifact_path=key)
+                        mlflow.sklearn.log_model(pipe, name=key)
                 else:
                     param_grid = {
                         "xgb__n_estimators":     xgb_cfg.get("n_estimators",     [100, 200]),
@@ -274,7 +274,7 @@ def train_selected_regression_models(
                             **{f"grid_{k.replace('xgb__','')}": str(v) for k, v in param_grid.items()},
                         })
                         log_xgb_importances(pipe, numeric_cols, categorical_cols, ordinal_cols)
-                        mlflow.sklearn.log_model(pipe, artifact_path=key)
+                        mlflow.sklearn.log_model(pipe, name=key)
 
                     print(f"\n{'='*40}\n  XGBoost Feature Importances (top 10)\n{'='*40}")
                     print_xgb_importances(pipe, numeric_cols, categorical_cols, ordinal_cols)
