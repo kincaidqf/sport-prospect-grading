@@ -55,6 +55,18 @@ REG_TARGET_COL = TARGET_COL["nba_role_zscore"]
 TIER_NAMES = ["Bust", "Bench", "Starter", "Star"]
 
 
+def _configure_thread_limits() -> None:
+    """Cap BLAS/OpenMP threads to reduce oversubscription (helps avoid OOM/SIGKILL on macOS)."""
+    for key in (
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ):
+        os.environ.setdefault(key, "1")
+
+
 def _build_meta_cols(clf_models: list[str], reg_models: list[str]) -> list[str]:
     cols = []
     for key in clf_models:
@@ -95,7 +107,7 @@ class MultimodalProspectModel:
         mm_cfg = (cfg.get("model", {}) or {}).get("multimodal", {}) or {}
         self._mm_cfg = mm_cfg
 
-        self.cv_folds = int(mm_cfg.get("cv_folds", 5))
+        self.cv_folds = int(mm_cfg.get("cv_folds", 3))
         self.output_dir = str(mm_cfg.get("output_dir", "outputs/multimodal"))
 
         base_models = mm_cfg.get("base_models", {}) or {}
@@ -258,6 +270,7 @@ class MultimodalProspectModel:
 
 
 def run(df=None, cfg=None, run_name=None, tracking_uri=None):
+    _configure_thread_limits()
     model_cfg     = (cfg.get("model", {}) or {})
     mm_cfg        = model_cfg.get("multimodal", {}) or {}
     composite_cfg = model_cfg.get("composite_score") or {}
