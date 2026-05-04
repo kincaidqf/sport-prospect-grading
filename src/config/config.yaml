@@ -75,10 +75,16 @@ model:
       pre_dispatch: 1
   text:
     pretrained: "distilbert-base-uncased"
-    output_dim: 128
-    max_length: 256
-    freeze_base: false
-    regression_target_col: nba_role_zscore
+    output_dim: 64
+    hidden_dim: 32
+    dropout: 0.2
+    huber_beta: 1.0
+    max_length: 128
+    freeze_base: true
+    task: regression # task: regression | classification — CE on prospect_tier often tracks tabular clf better for stacking (softmax tier probs).
+    classification_target_col: prospect_tier
+    num_classes: 4
+    regression_target_col: nba_role_zscore # Regression targets: nba_role_zscore (Gaussian tier export), VORP, DPM — VORP/DPM require columns on nba master.
     tier_proba_csv_path: null  # e.g. outputs/text_tier_proba_full.csv — all (Name, draft_year) with text; use with multimodal
 
   # Probability stacking: tabular clf/reg + scouting text, each with OOF meta features then a final refit.

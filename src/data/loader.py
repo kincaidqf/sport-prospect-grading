@@ -32,9 +32,11 @@ RANDOM_STATE = 42
 TARGET_COL = {
     "plus_minus":      "PLUS_MINUS",
     "became_starter":  "became_starter",
-    "prospect_tier":   "prospect_tier",       # 4-class: 0=bust 1=bench 2=starter 3=star
+    "prospect_tier":   "prospect_tier",        # 4-class: 0=bust 1=bench 2=starter 3=star
     "composite_score": "composite_score",      # preserved for backward compat
     "nba_role_zscore": "nba_role_zscore",      # new regression target
+    "vorp":            "VORP",                 # Basketball-Reference style VORP (nba master)
+    "darko_dpm":       "DPM",                  # DARKO total DPM when present in nba master
 }
 
 NUMERIC_FEATURES = [
@@ -324,8 +326,14 @@ def load_data(composite_cfg=None):
     ncaa = pd.read_csv(NCAA_PATH)
     nba  = pd.read_csv(NBA_PATH)
 
-    _nba_cols = nba[["player_name", "draft_year", "PLUS_MINUS", "MIN", "GP", "player_id",
-                      "PTS", "REB", "AST", "STL", "BLK", "position"]].rename(columns={
+    _nba_base = [
+        "player_name", "draft_year", "PLUS_MINUS", "MIN", "GP", "player_id",
+        "PTS", "REB", "AST", "STL", "BLK", "position",
+    ]
+    for _extra in ("VORP", "DPM"):
+        if _extra in nba.columns and _extra not in _nba_base:
+            _nba_base.append(_extra)
+    _nba_cols = nba[_nba_base].rename(columns={
         "PTS":      "nba_pts",
         "REB":      "nba_reb",
         "AST":      "nba_ast",

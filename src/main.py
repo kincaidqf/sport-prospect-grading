@@ -123,9 +123,15 @@ def main() -> None:
         train_cfg = cfg.get("training") or {}
         tm.train_and_evaluate_text_model(
             pretrained=text_cfg.get("pretrained", "distilbert-base-uncased"),
-            output_dim=int(text_cfg.get("output_dim", 128)),
+            output_dim=int(text_cfg.get("output_dim", 64)),
+            hidden_dim=int(text_cfg.get("hidden_dim", 32)),
+            dropout=float(text_cfg.get("dropout", 0.2)),
             freeze_base=bool(text_cfg.get("freeze_base", True)),
-            max_length=int(text_cfg.get("max_length", 256)),
+            max_length=int(text_cfg.get("max_length", 128)),
+            huber_beta=float(text_cfg.get("huber_beta", 1.0)),
+            task=text_cfg.get("task"),
+            classification_target_col=text_cfg.get("classification_target_col"),
+            num_classes=int(text_cfg.get("num_classes", 4)),
             batch_size=int(train_cfg.get("batch_size", 32)),
             epochs=int(train_cfg.get("epochs", 3)),
             lr=float(train_cfg.get("lr", 1e-3)),
