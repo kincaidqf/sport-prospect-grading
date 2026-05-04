@@ -21,14 +21,16 @@ def get_chronological_split(
     train_end_year: int = 2018,
     val_years: tuple[int, ...] = (2019, 2020),
     test_years: tuple[int, ...] = (2021, 2022, 2023),
+    split_mode: str = "chronological",
     seed: int = 42,
     stratify_col: str | None = "prospect_tier",
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Return random (train, val, test) split sized to prior year buckets.
+    """Return (train, val, test) split by year or random sampling.
 
-    The split is random-sampled for experimentation while preserving the same
-    train/val/test counts implied by the historical year-based boundaries.
+    - ``split_mode='chronological'`` (default): classic year-based split
+    - ``split_mode='random'``: random split sized to year-bucket proportions
     """
+    mode = str(split_mode).strip().lower()
     train_by_year = df[df["draft_year"] <= train_end_year]
     val_by_year = df[df["draft_year"].isin(val_years)]
     test_by_year = df[df["draft_year"].isin(test_years)]
@@ -37,6 +39,11 @@ def get_chronological_split(
             f"Reference year split produced empty train ({len(train_by_year)}) or test ({len(test_by_year)}). "
             "Check that draft_year values exist for the requested ranges."
         )
+
+    if mode == "chronological":
+        return train_by_year.copy(), val_by_year.copy(), test_by_year.copy()
+    if mode != "random":
+        raise ValueError(f"Unknown split_mode={split_mode!r}; use 'chronological' or 'random'.")
 
     total_n = len(df)
     test_size = len(test_by_year) / total_n

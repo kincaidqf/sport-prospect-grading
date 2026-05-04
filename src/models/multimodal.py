@@ -111,14 +111,6 @@ def _make_task_cfg(cfg: dict, task: str, mm_cfg: dict) -> dict:
     return out
 
 
-def _normalize_class_weight(value):
-    if value is None:
-        return None
-    if isinstance(value, str) and value.strip().lower() in ("none", "null", ""):
-        return None
-    return value
-
-
 def _split_train_calibration(df: pd.DataFrame, cal_size: float) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Split fold train/cal with stratification when possible, with a safe fallback."""
     try:
@@ -207,21 +199,6 @@ class MultimodalProspectModel:
         oof_ep = mm_cfg.get("text_oof_epochs")
         self.text_oof_epochs: int = int(oof_ep) if oof_ep is not None else int(train_cfg.get("epochs", 3))
 
-        stacker_cfg = mm_cfg.get("stacker", {}) or {}
-        base_params = dict(stacker_cfg.get("base_params") or {})
-        if "class_weight" in base_params:
-            base_params["class_weight"] = _normalize_class_weight(base_params.get("class_weight"))
-        self.stacker_base_params: dict[str, object] = {
-            "max_iter": int(base_params.pop("max_iter", 5000)),
-            "class_weight": _normalize_class_weight(base_params.pop("class_weight", "balanced")),
-            **base_params,
-        }
-        search_cfg = stacker_cfg.get("search", {}) or {}
-        self.stacker_search_enabled: bool = bool(search_cfg.get("enabled", False))
-        self.stacker_search_cv_folds: int = int(search_cfg.get("cv_folds", 3))
-        self.stacker_search_scoring: str = str(search_cfg.get("scoring", "f1_macro"))
-        self.stacker_search_param_grid: dict[str, list] = dict(search_cfg.get("param_grid") or {})
-
         self.meta_cols: list[str] = _build_meta_cols(
             self.clf_models,
             self.reg_models,
@@ -233,37 +210,6 @@ class MultimodalProspectModel:
         self.final_reg_bundles: dict[str, BaseModelBundle] = {}
         self.final_text_bundles: dict[str, object] = {}
         self.stacker: LogisticRegression | None = None
-        self.stacker_best_params_: dict[str, object] | None = None
-
-    def _fit_stacker(self, X: np.ndarray, y: pd.Series) -> None:
-        base_params = dict(self.stacker_base_params)
-        if self.stacker_search_enabled:
-            param_grid = self.stacker_search_param_grid or {
-                "C": [0.05, 0.1, 0.5, 1.0, 2.0],
-                "class_weight": [None, "balanced"],
-                "penalty": ["l2"],
-                "solver": ["lbfgs"],
-            }
-            if "class_weight" in param_grid:
-                param_grid["class_weight"] = [_normalize_class_weight(v) for v in param_grid["class_weight"]]
-            search = GridSearchCV(
-                estimator=LogisticRegression(**base_params),
-                param_grid=param_grid,
-                cv=self.stacker_search_cv_folds,
-                scoring=self.stacker_search_scoring,
-                n_jobs=1,
-            )
-            search.fit(X, y)
-            self.stacker = search.best_estimator_
-            self.stacker_best_params_ = search.best_params_
-            print(
-                "[multimodal] stacker grid-search best params: "
-                f"{self.stacker_best_params_} (score={search.best_score_:.4f})"
-            )
-            return
-        self.stacker = LogisticRegression(**base_params)
-        self.stacker.fit(X, y)
-        self.stacker_best_params_ = None
 
     def fit(self, train_df: pd.DataFrame, mlflow_ctx=None) -> None:
         clf_cfg = _make_task_cfg(self.cfg, "classification", self._mm_cfg)
@@ -311,7 +257,8 @@ class MultimodalProspectModel:
             _append_bundle_proba(meta_train, text_bundles, "text", self.text_models, fold_val)
             print(f"[multimodal] OOF fold {fold_idx + 1}/{self.cv_folds}: tabular + text tower fitted")
 
-        self._fit_stacker(meta_train.values, y_all)
+        self.stacker = LogisticRegression(class_weight="balanced", max_iter=5000)
+        self.stacker.fit(meta_train.values, y_all)
 
         final_core, final_cal = _split_train_calibration(train_work, self.cal_size)
 
@@ -459,8 +406,6 @@ def run(df=None, cfg=None, run_name=None, tracking_uri=None):
             "text_oof_epochs": model.text_oof_epochs,
             "cal_size":        model.cal_size,
             "pretune_oof":     model.pretune_oof,
-            "stacker_search_enabled": model.stacker_search_enabled,
-            "stacker_search_scoring": model.stacker_search_scoring,
             "meta_cols":       str(model.meta_cols),
             "text_meta_key":   str(model.text_meta_key),
         })
@@ -479,18 +424,10 @@ def run(df=None, cfg=None, run_name=None, tracking_uri=None):
             tags={"estimator": "logistic_stacker"},
         )
         with stacker_run_mgr:
-            stacker_params = model.stacker.get_params() if model.stacker is not None else {}
             log_common_params({
                 "stacker":         "LogisticRegression",
-                "class_weight":    str(stacker_params.get("class_weight")),
-                "max_iter":        int(stacker_params.get("max_iter", 5000)),
-                "C":               float(stacker_params.get("C", 1.0)),
-                "solver":          str(stacker_params.get("solver", "lbfgs")),
-                "penalty":         str(stacker_params.get("penalty", "l2")),
-                "search_enabled":  model.stacker_search_enabled,
-                "search_cv_folds": model.stacker_search_cv_folds,
-                "search_scoring":  model.stacker_search_scoring,
-                "best_params":     str(model.stacker_best_params_ or {}),
+                "class_weight":    "balanced",
+                "max_iter":        5000,
                 "n_meta_features": len(model.meta_cols),
             })
             mlflow.sklearn.log_model(model.stacker, name="stacker")
