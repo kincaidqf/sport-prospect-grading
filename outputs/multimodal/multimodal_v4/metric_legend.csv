@@ -1,0 +1,14 @@
+metric,full_name,description,formula,direction
+accuracy,Accuracy,Fraction of prospects predicted to the exact correct tier,correct / total,higher
+balanced_accuracy,Balanced Accuracy,Per-class recall averaged equally — not inflated by majority class,mean(recall per class),higher
+auc,AUC-OvR,Area Under ROC Curve; macro average over tiers using one-vs-rest,macro OvR AUC,higher
+f1_macro,F1 Macro,Unweighted mean of per-class F1; treats all tiers equally,mean(2·P·R / (P+R) per class),higher
+top1_accuracy,Top-1 Accuracy,Alias for accuracy,correct / total,higher
+within_one_accuracy,Within-One Accuracy,Fraction where |predicted − actual| ≤ 1 tier,mean(|pred - true| ≤ 1),higher
+ordinal_mae,Ordinal MAE,Mean absolute tier distance between predicted and actual tier,mean |pred − true|,lower
+distance_weighted_accuracy,Distance-Weighted Accuracy,Partial credit: 1.0 exact / 0.67 one-off / 0.33 two-off / 0.0 three-off,mean(1 − |pred − true| / 3),higher
+expected_class_mae,Expected-Class MAE,MAE of prob-weighted expected predicted tier vs. actual; captures calibration quality,mean |Σ(p_i · i) − true|,lower
+quadratic_weighted_kappa,Quadratic Weighted Kappa,Cohen's kappa penalizing large ordinal mistakes quadratically,quadratic weighted kappa formula,higher
+precision_{tier},Precision for tier,Of all prospects predicted as {tier}: fraction who were actually {tier},TP / (TP + FP),higher
+recall_{tier},Recall for tier,Of all actual {tier} prospects: fraction correctly identified,TP / (TP + FN),higher
+f1_{tier},F1 for tier,Harmonic mean of precision and recall for {tier},2 · precision · recall / (precision + recall),higher
