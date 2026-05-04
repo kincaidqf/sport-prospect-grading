@@ -1,13 +1,14 @@
 """Multimodal orchestrator for the Probability Stacking Model (PSM Phase 1).
 
 Trains classification and regression base models via out-of-fold cross-validation,
-stacks their tier probabilities with a logistic meta-model, and exposes a unified
-predict_proba interface for downstream use.
+optionally joins frozen text-model tier probabilities (CSV keyed by Name + draft_year),
+stacks all tier probabilities with a logistic meta-model, and exposes predict_proba.
 """
 from __future__ import annotations
 
 import copy
 import os
+from pathlib import Path
 
 import mlflow
 import mlflow.sklearn
@@ -32,7 +33,12 @@ from src.models.classification_model import (
     CLASSIFICATION_MODEL_REGISTRY,
     train_selected_classification_models,
 )
-from src.models.probability import PROBA_COLUMNS, TIER_CLASS_NAMES, BaseModelBundle
+from src.models.probability import (
+    PROBA_COLUMNS,
+    TIER_CLASS_NAMES,
+    BaseModelBundle,
+    normalize_proba,
+)
 from src.models.regression_model import (
     REGRESSION_MODEL_REGISTRY,
     train_selected_regression_models,
@@ -67,7 +73,12 @@ def _configure_thread_limits() -> None:
         os.environ.setdefault(key, "1")
 
 
-def _build_meta_cols(clf_models: list[str], reg_models: list[str]) -> list[str]:
+def _build_meta_cols(
+    clf_models: list[str],
+    reg_models: list[str],
+    *,
+    text_meta_key: str | None = None,
+) -> list[str]:
     cols = []
     for key in clf_models:
         for c in PROBA_COLUMNS:
@@ -75,7 +86,30 @@ def _build_meta_cols(clf_models: list[str], reg_models: list[str]) -> list[str]:
     for key in reg_models:
         for c in PROBA_COLUMNS:
             cols.append(f"regression__{key}__{c}")
+    if text_meta_key:
+        for c in PROBA_COLUMNS:
+            cols.append(f"text__{text_meta_key}__{c}")
     return cols
+
+
+def _load_text_tier_proba_table(path: str) -> pd.DataFrame:
+    """Load Name/draft_year + PROBA_COLUMNS from a text-model export (see text_model tier export)."""
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"multimodal text_tier_proba_csv not found: {path}")
+    raw = pd.read_csv(p)
+    id_cols = ["Name", "draft_year"]
+    for c in id_cols + list(PROBA_COLUMNS):
+        if c not in raw.columns:
+            raise ValueError(f"Text tier proba CSV missing column {c!r}: {path}")
+    out = raw[id_cols + list(PROBA_COLUMNS)].copy()
+    out["Name"] = out["Name"].astype(str).str.strip()
+    out["draft_year"] = pd.to_numeric(out["draft_year"], errors="coerce")
+    out = out.dropna(subset=id_cols + list(PROBA_COLUMNS))
+    out["draft_year"] = out["draft_year"].astype(int)
+    if out.duplicated(subset=id_cols).any():
+        out = out.drop_duplicates(subset=id_cols, keep="last")
+    return out.reset_index(drop=True)
 
 
 def _append_bundle_proba(
@@ -89,6 +123,31 @@ def _append_bundle_proba(
         proba_df = bundles[key].predict_tier_proba(df)
         for col in PROBA_COLUMNS:
             meta_df.loc[df.index, f"{task}__{key}__{col}"] = proba_df[col].values
+
+
+def _text_proba_for_ids(
+    df: pd.DataFrame,
+    lookup: pd.DataFrame,
+    text_meta_key: str,
+) -> pd.DataFrame:
+    """Align text tier probabilities to df rows; missing keys → uniform 0.25 per class."""
+    id_cols = ["Name", "draft_year"]
+    for c in id_cols:
+        if c not in df.columns:
+            raise ValueError(
+                f"Text tier proba merge requires {c!r} on the frame (add it or disable multimodal.text_tier_proba_csv).",
+            )
+    side = df[id_cols].copy()
+    side["Name"] = side["Name"].astype(str).str.strip()
+    side["draft_year"] = pd.to_numeric(side["draft_year"], errors="coerce").astype("Int64")
+    merged = side.merge(lookup, on=id_cols, how="left", validate="many_to_one")
+    raw = merged[list(PROBA_COLUMNS)].to_numpy(dtype=float, copy=True)
+    missing = np.isnan(raw).any(axis=1)
+    if missing.any():
+        raw[missing] = 0.25
+    raw = normalize_proba(raw)
+    out = pd.DataFrame(raw, columns=PROBA_COLUMNS, index=df.index)
+    return out.rename(columns={c: f"text__{text_meta_key}__{c}" for c in PROBA_COLUMNS})
 
 
 def _make_task_cfg(cfg: dict, task: str, mm_cfg: dict) -> dict:
@@ -121,7 +180,21 @@ class MultimodalProspectModel:
         xgb_cfg = mm_cfg.get("xgboost", {}) or {}
         self.pretune_oof = bool(xgb_cfg.get("pretune_oof_params", False))
 
-        self.meta_cols: list[str] = _build_meta_cols(self.clf_models, self.reg_models)
+        raw_text_csv = mm_cfg.get("text_tier_proba_csv")
+        self.text_tier_proba_csv: str | None = (
+            str(raw_text_csv).strip() if raw_text_csv is not None and str(raw_text_csv).strip() else None
+        )
+        self.text_meta_key: str | None = None
+        self._text_lookup: pd.DataFrame | None = None
+        if self.text_tier_proba_csv:
+            self.text_meta_key = str(mm_cfg.get("text_meta_key", "scouting")).strip() or "scouting"
+            self._text_lookup = _load_text_tier_proba_table(self.text_tier_proba_csv)
+
+        self.meta_cols: list[str] = _build_meta_cols(
+            self.clf_models,
+            self.reg_models,
+            text_meta_key=self.text_meta_key,
+        )
 
         # Set by fit()
         self.final_clf_bundles: dict[str, BaseModelBundle] = {}
@@ -165,6 +238,11 @@ class MultimodalProspectModel:
             _append_bundle_proba(meta_train, clf_bundles, "classification", self.clf_models, fold_val)
             _append_bundle_proba(meta_train, reg_bundles, "regression",     self.reg_models, fold_val)
 
+        if self._text_lookup is not None and self.text_meta_key is not None:
+            text_part = _text_proba_for_ids(train_df, self._text_lookup, self.text_meta_key)
+            for col in text_part.columns:
+                meta_train.loc[train_df.index, col] = text_part[col].values
+
         self.stacker = LogisticRegression(class_weight="balanced", max_iter=5000)
         self.stacker.fit(meta_train.values, y_all)
 
@@ -195,6 +273,8 @@ class MultimodalProspectModel:
         for key in self.reg_models:
             proba = self.final_reg_bundles[key].predict_tier_proba(df)
             parts.append(proba.rename(columns={c: f"regression__{key}__{c}" for c in PROBA_COLUMNS}))
+        if self._text_lookup is not None and self.text_meta_key is not None:
+            parts.append(_text_proba_for_ids(df, self._text_lookup, self.text_meta_key))
         return pd.concat(parts, axis=1)[self.meta_cols]
 
     def predict_proba(self, df: pd.DataFrame) -> np.ndarray:
@@ -303,6 +383,8 @@ def run(df=None, cfg=None, run_name=None, tracking_uri=None):
             "cal_size":     model.cal_size,
             "pretune_oof":  model.pretune_oof,
             "meta_cols":    str(model.meta_cols),
+            "text_tier_proba_csv": str(model.text_tier_proba_csv or ""),
+            "text_meta_key":       str(model.text_meta_key or ""),
         })
         log_data_summary(
             df, target_col=CLF_TARGET_COL, task="classification",

@@ -25,6 +25,7 @@ class FakeStacker:
 class FakeModel:
     clf_models = ["logistic_l1", "xgboost"]
     reg_models = ["lasso"]
+    _mm_cfg: dict = {}
 
     def __init__(self, meta_features):
         self.meta_cols = list(meta_features.columns)
@@ -63,13 +64,14 @@ def _fake_inputs():
     test_df = pd.DataFrame({
         "Name": ["A", "B", "C", "D"],
         "draft_year": [2020, 2021, 2022, 2023],
+        "draft_pick": [5, 20, 15, 45],
     })
     y_test = pd.Series([0, 1, 2, 3])
     test_proba = np.array([
         [0.70, 0.20, 0.05, 0.05],
         [0.20, 0.55, 0.15, 0.10],
         [0.10, 0.20, 0.55, 0.15],
-        [0.55, 0.25, 0.15, 0.05],
+        [0.05, 0.10, 0.15, 0.70],
     ])
     y_pred = np.argmax(test_proba, axis=1)
 
@@ -109,6 +111,9 @@ def test_write_multimodal_report_creates_expected_outputs(tmp_path):
         "expected_vs_true.png",
         "probability_mass_by_true_class.png",
         "worst_misses_probability_bars.png",
+        "lottery_bust_hits.csv",
+        "late_star_hits.csv",
+        "best_hits_probability_bars.png",
         "stacker_contribution_heatmap.png",
     }
     actual_files = {p.name for p in tmp_path.iterdir()}

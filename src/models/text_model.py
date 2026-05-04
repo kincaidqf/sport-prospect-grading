@@ -674,7 +674,8 @@ def train_and_evaluate_text_model(
 
     When ``regression_target_col`` is ``nba_role_zscore`` (default), training
     residuals yield ``tier_residual_std`` for exporting 4-class probabilities
-    compatible with multimodal meta-features (``tier_proba_csv_path``).
+    compatible with multimodal meta-features (``tier_proba_csv_path`` writes
+    every row in the text merge frame: ``Name``, ``draft_year``, ``p_bust``, …).
     """
     # Callers often pass YAML-loaded values: PyYAML 1.1 can leave scientific notation
     # (e.g. ``1e-3``) as str, which breaks torch optimizers.
@@ -952,16 +953,26 @@ def train_and_evaluate_text_model(
             "regression_target_col='nba_role_zscore' (stats regression alignment)."
         )
     if tier_proba_csv_path and regression_target_col == TARGET_COL["nba_role_zscore"] and tier_residual_std > 0.0:
-        proba_df = predict_tier_proba_from_role_z(y_pred, tier_residual_std)
-        id_cols = [c for c in ("Name", "draft_year") if c in test_df.columns]
+        # Full-frame export so multimodal can join on every (Name, draft_year) with scouting text,
+        # not only the random held-out test split.
+        proba_full = model.predict_tier_proba_from_texts(
+            df["text"].tolist(),
+            target_mean=target_mean,
+            target_std=target_std,
+            tier_residual_std=tier_residual_std,
+            max_length=max_length,
+            batch_size=batch_size,
+            device=device,
+        )
+        id_cols = [c for c in ("Name", "draft_year") if c in df.columns]
         out_csv = pd.concat(
-            [test_df[id_cols].reset_index(drop=True), proba_df.reset_index(drop=True)],
+            [df[id_cols].reset_index(drop=True), proba_full.reset_index(drop=True)],
             axis=1,
         )
         out_p = Path(tier_proba_csv_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
         out_csv.to_csv(out_p, index=False)
-        print(f"\n[tier_proba] Wrote {len(out_csv)} rows to {out_p}")
+        print(f"\n[tier_proba] Wrote {len(out_csv)} rows (full text frame) to {out_p}")
         if mlflow.active_run() is not None:
             mlflow.log_artifact(str(out_p), artifact_path="tier_proba")
 

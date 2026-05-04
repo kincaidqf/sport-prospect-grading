@@ -79,12 +79,14 @@ model:
     max_length: 256
     freeze_base: false
     regression_target_col: nba_role_zscore
-    tier_proba_csv_path: null  # e.g. outputs/text_tier_proba_test.csv — multimodal meta-features
+    tier_proba_csv_path: null  # e.g. outputs/text_tier_proba_full.csv — all (Name, draft_year) with text; use with multimodal
 
-  # Probability stacking (stats-only). Lower cv_folds / lighter oof_params if the OS kills the process.
+  # Probability stacking: stats base models + optional text tier CSV. Lower cv_folds / lighter oof_params if the OS kills the process.
   multimodal:
     cv_folds: 3
     output_dir: outputs/multimodal
+    text_tier_proba_csv: null  # same path as model.text.tier_proba_csv_path after a text run; null = stats-only stacker
+    text_meta_key: scouting   # meta column prefix text__{key}__p_bust …
     calibration:
       method: sigmoid
       calibration_size: 0.15
