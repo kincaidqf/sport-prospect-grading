@@ -81,7 +81,9 @@ def load_checkpoint(path: str, device: torch.device) -> tuple[TextProspectPredic
     meta = {
         "target_mean": float(ckpt["target_mean"]),
         "target_std": float(ckpt["target_std"]),
-        "star_threshold": float(ckpt["star_threshold"]),
+        "star_threshold": float(ckpt.get("star_threshold", float("nan"))),
+        "tier_residual_std": float(ckpt.get("tier_residual_std", 0.0)),
+        "regression_target_col": str(ckpt.get("regression_target_col", TARGET)),
         "max_length": int(ckpt.get("max_length", 256)),
     }
     model.eval()
