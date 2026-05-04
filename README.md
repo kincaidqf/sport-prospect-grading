@@ -5,7 +5,7 @@
 Predict NBA draft success using:
 
 - College statistics (regression and classification)
-- Scouting reports (NLP text model)
+- Scouting reports (transformer encoder or shallow lexicon model)
 - Combined stats + scouting (multimodal model)
 
 ---
@@ -13,6 +13,8 @@ Predict NBA draft success using:
 ## Model Architecture
 
 This project uses a **probability stacking ensemble** (PSM). Tabular classification and regression base models are trained via out-of-fold cross-validation; their probability outputs are stacked into a meta-feature matrix that a logistic regression meta-model learns to combine.
+
+Scouting-report models apply the same contract: text-only estimators are trained on labeled scouting reports merged with NBA outcomes and yield four-class tier probabilities that extend the meta-feature matrix when multimodal text towers are enabled.
 
 ### Prospect Tier Labels
 
@@ -58,7 +60,7 @@ flowchart TD
         REG_P["Regression\nz-score prediction\n→ Gaussian CDF at thresholds -0.5, 0.5, 1.5\n→ 4-class tier probabilities"]
     end
 
-    META["Meta-Feature Matrix: 16 columns\n4 models × p_bust, p_bench, p_starter, p_star"]
+    META["Meta-Feature Matrix 4 prob columns per base\ne.g. 16 when using four tabular bases only"]
     STACKER["Logistic Regression Meta-Model\ntrained on OOF meta-features"]
     OUT["Final Prediction\nBust / Bench / Starter / Star  +  per-class confidence"]
 
@@ -168,9 +170,76 @@ flowchart TD
 
 ---
 
+### Transformer scouting model
+
+A pretrained transformer encoder (default DistilBERT) tokenizes each report, pools the CLS representation, and maps it through a small projection head. A prospect head then predicts either a normalized regression target or class logits; tier probabilities for stacking follow the Gaussian tier mapping used with tabular regression or a softmax over classes for tier classification.
+
+```mermaid
+flowchart TD
+    subgraph txtIn["Input"]
+        RAW["Raw scouting strings"]
+        TOK["AutoTokenizer truncation padding max_length"]
+    end
+    subgraph encModel["ScoutingReportEncoder"]
+        BB["Transformer backbone e.g. DistilBERT"]
+        CLS["CLS pooled hidden state"]
+        ENCHEAD["Linear ReLU Dropout to output_dim"]
+    end
+    subgraph headModel["TextProspectPredictor"]
+        SH["Shared MLP to hidden_dim"]
+        PICKTASK{"regression or classification"}
+        REG["reg_head normalized scalar"]
+        CLF["cls_head logits"]
+    end
+    subgraph tierProb["Four tier probabilities"]
+        GAU["Regression denorm Gaussian CDF at tier cuts"]
+        SMX["Classification softmax"]
+        POUT["p_bust p_bench p_starter p_star"]
+    end
+    RAW --> TOK
+    TOK --> BB
+    BB --> CLS
+    CLS --> ENCHEAD
+    ENCHEAD --> SH
+    SH --> PICKTASK
+    PICKTASK --> REG
+    PICKTASK --> CLF
+    REG --> GAU
+    CLF --> SMX
+    GAU --> POUT
+    SMX --> POUT
+```
+
+---
+
+### Shallow scouting text
+
+Handcrafted sentiment and lexicon features, with optional TF–IDF trained on the training corpus, are stacked and fed to ridge regression on role score; residual spread calibrates Gaussian tier probabilities in line with the stats-based regression branch.
+
+```mermaid
+flowchart TD
+    subgraph shallowFeat["Feature construction"]
+        VAD["VADER plus lexicon phrase counts"]
+        TFIDF["Optional TfidfVectorizer"]
+        STACK["Sparse or dense design matrix"]
+    end
+    subgraph ridgeFit["Ridge target nba_role_zscore"]
+        RDG["Ridge regression"]
+    end
+    subgraph outProb["PSM outputs"]
+        CAL["Residual std plus Gaussian tier probs"]
+    end
+    VAD --> STACK
+    TFIDF --> STACK
+    STACK --> RDG
+    RDG --> CAL
+```
+
+---
+
 ### Multi-Modal Probability Stacking
 
-The multi-modal model is a **stacking ensemble**. Each base model independently produces 4-class probability estimates from the same NCAA input features. These are concatenated into a 16-column meta-feature matrix, and a logistic regression meta-model learns the optimal weighted combination across all base models.
+The multi-modal model is a **stacking ensemble**. Tabular bases consume preprocessed NCAA statistics; text bases listed for multimodal routing consume scouting report strings through either the transformer or shallow backend. Each base contributes four tier probabilities, so the meta-feature matrix grows by four columns per enabled base (sixteen columns for the four tabular models alone when no text towers run). A logistic regression meta-model learns the weighted combination.
 
 Training uses **out-of-fold (OOF) cross-validation** so the meta-model trains on predictions the base models made on data they never saw during their own training — this prevents information leakage.
 
@@ -195,8 +264,8 @@ flowchart TD
         end
     end
 
-    subgraph META["Meta-Feature Matrix: N samples × 16 columns"]
-        MF["clf__logistic_l2:  p_bust  p_bench  p_starter  p_star\nclf__xgboost:     p_bust  p_bench  p_starter  p_star\nreg__ridge:       p_bust  p_bench  p_starter  p_star\nreg__xgboost:     p_bust  p_bench  p_starter  p_star"]
+    subgraph META["Meta-Feature Matrix — four probabilities per enabled base"]
+        MF["Illustration: four tabular bases fill sixteen columns; text towers append additional groups of four"]
     end
 
     subgraph STACK["Phase 2 — Logistic Regression Meta-Model (Stacker)"]
@@ -236,8 +305,9 @@ sport-prospect-grading/
 │   │   ├── multimodal_reporting.py  # Evaluation metrics and output tables for multimodal runs
 │   │   ├── probability.py           # Shared probability interface (BaseModelBundle, CDF conversion)
 │   │   ├── classification_inference.py  # Inference utilities for fitted classification models
-│   │   ├── text_model.py            # Transformer encoder on scouting reports
-│   │   └── interpret_text.py        # Occlusion, probes, log-odds, VADER correlations
+│   │   ├── text_model.py            # Transformer encoder + predictor on scouting reports
+│   │   ├── simple_text_model.py     # Shallow VADER, lexicons, optional TF–IDF, Ridge
+│   │   └── interpret_text.py        # Optional offline interpretability helpers
 │   ├── data/
 │   │   ├── loader.py                # Tabular data loading, feature engineering, preprocessing
 │   │   └── dataset.py               # PyTorch Dataset for text/multimodal models
@@ -266,12 +336,13 @@ sport-prospect-grading/
 #### `src/models/`
 - **`regression_model.py`**: Lasso/Ridge/XGBoost regression predicting `nba_role_zscore` (or `plus_minus`) from final-year NCAA college stats.
 - **`classification_model.py`**: LogisticL1/LogisticL2/XGBoost classification predicting `prospect_tier` from NCAA stats.
-- **`multimodal.py`**: Probability stacking ensemble — trains base models via 5-fold OOF CV, builds a 16-column meta-feature matrix, and fits a logistic regression meta-model.
+- **`multimodal.py`**: Probability stacking ensemble — trains base models via 5-fold OOF CV, builds a meta-feature matrix (four probability columns per configured base), and fits a logistic regression meta-model.
 - **`multimodal_reporting.py`**: Evaluation tables, per-class metrics, and output CSVs for multimodal runs.
 - **`probability.py`**: Shared `BaseModelBundle` interface: `predict_tier_proba()` for all base models, Gaussian CDF conversion for regression outputs, and post-hoc calibration utilities.
 - **`classification_inference.py`**: Inference utilities for applying fitted classification models to new data.
-- **`text_model.py`**: NLP encoder (ScoutingReportEncoder) for fine-tuning transformer models on scouting report texts. Pass `save_path=` to `train_and_evaluate_text_model` to persist weights for interpretability.
-- **`interpret_text.py`**: Probes, aggregated occlusion, corpus log-odds, VADER sentiment correlations, and `outputs/interpretability/REPORT.md` for all prediction heads.
+- **`text_model.py`**: Transformer encoder and prospect head on scouting reports; regression or tier classification with optional full-corpus tier-probability export for multimodal.
+- **`simple_text_model.py`**: Shallow sentiment and lexicon features with optional TF–IDF and ridge regression on `nba_role_zscore`; Gaussian tier probabilities for stacking and optional multimodal shallow towers.
+- **`interpret_text.py`**: Optional offline interpretability helpers (not required for training runs).
 
 #### `src/training/`
 - **`splits.py`**: Train/val/test splitting utilities with stratified and chronological modes.
@@ -355,13 +426,14 @@ uv run python src/main.py --model regression
 uv run python src/main.py --model classification
 uv run python src/main.py --model multimodal
 uv run python src/main.py --model text
+uv run python src/main.py --model text_shallow
 ```
 
 ### All CLI arguments
 
 | Argument | Type | Default | Description |
 |---|---|---|---|
-| `--model` | `regression \| classification \| text \| multimodal` | value from `config.yaml` | Selects which model pipeline to run. Overrides `model.type` in config. |
+| `--model` | `regression \| classification \| text \| text_shallow \| multimodal` | value from `config.yaml` | Selects which model pipeline to run. Overrides `model.type` in config. |
 | `--config` | path | `src/config/config.yaml` | Path to the YAML config file. |
 | `--run-name` | string | auto-generated | MLflow parent run name. **Use this to label and differentiate runs.** |
 | `--epochs` | int | value from config | Override `training.epochs` for text/multimodal models. |
@@ -382,25 +454,11 @@ uv run python src/main.py --model classification --run-name clf-prospect-tier-v1
 
 # Label a multimodal stacking run
 uv run python src/main.py --model multimodal --run-name multimodal-lgb-xgb-v1
+
+# Label text runs
+uv run python src/main.py --model text --run-name text-distilbert-role-z-v1
+uv run python src/main.py --model text_shallow --run-name text-shallow-ridge-v1
 ```
-
-### Text model interpretability
-
-Train with a checkpoint path, then run interpretability (from repo root):
-
-```bash
-uv run python -c "from src.models.text_model import train_and_evaluate_text_model; train_and_evaluate_text_model(save_path='outputs/checkpoints/text_model.pt')"
-
-uv run python -m src.models.interpret_text --checkpoint outputs/checkpoints/text_model.pt
-```
-
-Fast run (smaller/faster occlusion):
-
-```bash
-uv run python -m src.models.interpret_text --checkpoint outputs/checkpoints/text_model.pt --n-occlusion 20 --max-variants-per-report 40
-```
-
-Use `--retrain --checkpoint-out ...` to train and interpret in one step. Outputs land in `outputs/interpretability/`.
 
 ### Auto-generated run names
 
@@ -499,14 +557,37 @@ model:
     pretrained: "distilbert-base-uncased"
     output_dim: 64
     hidden_dim: 32
+    dropout: 0.2
+    huber_beta: 1.0
     max_length: 128
-    freeze_base: true             # typical default for small scouting corpora
-training:
-  batch_size: 32
-  lr: 1e-3
-  epochs: 10
-  early_stopping_patience: 3
+    freeze_base: true
+    task: regression              # regression | classification
+    classification_target_col: prospect_tier
+    num_classes: 4
+    regression_target_col: nba_role_zscore  # or VORP, DPM when present on NBA master
+    tier_proba_csv_path: null     # optional full-corpus tier probs CSV for multimodal
 ```
+
+Architecture and targets are set under `model.text`; optimization uses the shared `training` block from `src/main.py`. The training loop runs for the configured epoch count without an early-stopping hook in the text trainer.
+
+### Shallow text model (`--model text_shallow`)
+
+```yaml
+model:
+  text_shallow:
+    ridge_alpha: 1.0
+    sentiment:
+      enabled: true
+      use_pos_neg_neu: true
+    # lexicons: {}              # optional: success_words, red_flag_words, red_flag_phrases
+    tfidf:
+      enabled: false
+      max_features: 1000
+      min_df: 2
+      ngram_range: [1, 2]
+```
+
+Shallow hyperparameters live under `model.text_shallow`; optional tier-probability CSV export for multimodal follows `model.text.tier_proba_csv_path` when invoked from `main.py`. Multimodal stacks wire shallow towers through `model.multimodal.text_backends`.
 
 ### Shared training settings
 
@@ -948,3 +1029,25 @@ The main areas where claude contributed implementation work were:
 - Multimodal orchestrator and reporting modules
 - Test suite
 - All planning and documentation markdown files
+
+---
+
+# Ethan AI Usage Disclosure
+
+I used LLM assistants for brainstorming and implementation support.
+
+**Gemini**
+
+- Brainstorming architectures and training setups for the scouting-report text model.
+
+**Cursor**
+
+- Summarizing the repo for README work and explaining structure—where modules, configs, and scripts live.
+- Scripts to fetch external metrics used in modeling (VORP, DARKO).
+- Iterating on training when the text model kept collapsing to a degenerate prediction (e.g. always choosing zero): loss setup, sampling, and related troubleshooting.
+- Brainstorming how to interpret what the text model was learning; connecting interpretability pieces into the broader workflow.
+- Speeding up training: batching, `max_length`, and related dataloader/training-loop tweaks.
+- Wiring the trained text tower into the multimodal stack.
+- The “best hits” visualization.
+- Brainstorming and shaping a simpler text-only baseline model.
+- Running the multimodal pipeline on 2026 prospects (scripts and wiring).
