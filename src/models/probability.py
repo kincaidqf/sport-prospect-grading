@@ -7,6 +7,7 @@ probability interface consumed by multimodal.py.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -132,3 +133,48 @@ class BaseModelBundle:
             return proba_to_dataframe(proba, index=df.index)
 
         raise ValueError(f"Unknown task '{self.task}'; expected 'classification' or 'regression'.")
+
+
+def load_text_tier_proba_table(path: str) -> pd.DataFrame:
+    """Load Name/draft_year + PROBA_COLUMNS from a text-model tier CSV export."""
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"text tier proba CSV not found: {path}")
+    raw = pd.read_csv(p)
+    id_cols = ["Name", "draft_year"]
+    for c in id_cols + list(PROBA_COLUMNS):
+        if c not in raw.columns:
+            raise ValueError(f"Text tier proba CSV missing column {c!r}: {path}")
+    out = raw[id_cols + list(PROBA_COLUMNS)].copy()
+    out["Name"] = out["Name"].astype(str).str.strip()
+    out["draft_year"] = pd.to_numeric(out["draft_year"], errors="coerce")
+    out = out.dropna(subset=id_cols + list(PROBA_COLUMNS))
+    out["draft_year"] = out["draft_year"].astype(int)
+    if out.duplicated(subset=id_cols).any():
+        out = out.drop_duplicates(subset=id_cols, keep="last")
+    return out.reset_index(drop=True)
+
+
+def align_text_tier_proba_to_meta_cols(
+    df: pd.DataFrame,
+    lookup: pd.DataFrame,
+    text_meta_key: str,
+) -> pd.DataFrame:
+    """Map text tier probabilities onto df rows as ``text__<text_meta_key>__p_*``; missing → uniform."""
+    id_cols = ["Name", "draft_year"]
+    for c in id_cols:
+        if c not in df.columns:
+            raise ValueError(
+                f"Text tier proba merge requires column {c!r} on the input frame.",
+            )
+    side = df[id_cols].copy()
+    side["Name"] = side["Name"].astype(str).str.strip()
+    side["draft_year"] = pd.to_numeric(side["draft_year"], errors="coerce").astype("Int64")
+    merged = side.merge(lookup, on=id_cols, how="left", validate="many_to_one")
+    raw = merged[list(PROBA_COLUMNS)].to_numpy(dtype=float, copy=True)
+    missing = np.isnan(raw).any(axis=1)
+    if missing.any():
+        raw[missing] = 0.25
+    raw = normalize_proba(raw)
+    out = pd.DataFrame(raw, columns=PROBA_COLUMNS, index=df.index)
+    return out.rename(columns={c: f"text__{text_meta_key}__{c}" for c in PROBA_COLUMNS})

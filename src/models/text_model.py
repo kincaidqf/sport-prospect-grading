@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import os
 import re
-from pathlib import Path
 import glob
-from typing import Sequence
+from pathlib import Path
+from typing import Any, Sequence
 
 import matplotlib.pyplot as plt
 import mlflow
@@ -26,8 +26,14 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from transformers import AutoModel, AutoTokenizer
 
-from src.data.loader import CACHE_DIR, TARGET_COL, load_data
-from src.models.probability import TIER_THRESHOLDS, proba_to_dataframe, zscore_to_tier_proba
+from src.data.loader import CACHE_DIR, RANDOM_STATE, TARGET_COL, load_data
+from src.models.probability import (
+    PROBA_COLUMNS,
+    TIER_THRESHOLDS,
+    normalize_proba,
+    proba_to_dataframe,
+    zscore_to_tier_proba,
+)
 from src.utils.mlflow_utils import (
     build_mlflow_context,
     log_common_params,
@@ -279,6 +285,20 @@ def load_text_data(composite_cfg: dict | None = None) -> pd.DataFrame:
     return merged
 
 
+def attach_scouting_text_columns(df: pd.DataFrame, composite_cfg: dict | None = None) -> pd.DataFrame:
+    """Left-merge scouting ``text`` and text-aux labels onto a stats frame (``Name`` + ``draft_year``).
+
+    ``survived_3yrs`` is defined in ``load_text_data`` (season-cache logic) and is absent from
+    ``load_data()`` alone; multimodal text training needs it alongside ``became_starter``.
+    """
+    d = df.copy()
+    for col in ("text", "survived_3yrs"):
+        if col in d.columns:
+            d = d.drop(columns=[col])
+    side = load_text_data(composite_cfg=composite_cfg)[["Name", "draft_year", "text", "survived_3yrs"]]
+    return d.merge(side, on=["Name", "draft_year"], how="left")
+
+
 def compute_tier_residual_std(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """Training residual std in the regression target's native units (e.g. ``nba_role_zscore``)."""
     return float(np.std(np.asarray(y_true, dtype=float) - np.asarray(y_pred, dtype=float), ddof=0))
@@ -304,6 +324,255 @@ def predict_tier_proba_from_role_z(
         thresholds,
     )
     return proba_to_dataframe(proba)
+
+
+class UniformTextTierBundle:
+    """Fallback tier probabilities when too few text rows exist to fine-tune."""
+
+    def predict_tier_proba(self, df: pd.DataFrame) -> pd.DataFrame:
+        return proba_to_dataframe(np.full((len(df), 4), 0.25, dtype=float), index=df.index)
+
+
+class TextTierPredictorBundle:
+    """Fitted text head + calibration stats; exposes ``predict_tier_proba`` like stats bundles."""
+
+    def __init__(
+        self,
+        model: TextProspectPredictor,
+        *,
+        target_mean: float,
+        target_std: float,
+        tier_residual_std: float,
+        max_length: int,
+        batch_size: int,
+        device: torch.device,
+    ) -> None:
+        self.model = model
+        self.target_mean = float(target_mean)
+        self.target_std = float(target_std)
+        self.tier_residual_std = float(tier_residual_std)
+        self.max_length = int(max_length)
+        self.batch_size = int(batch_size)
+        self.device = device
+
+    def predict_tier_proba(self, df: pd.DataFrame) -> pd.DataFrame:
+        if "text" not in df.columns:
+            raise ValueError("Text tier bundle requires a 'text' column (merge scouting text onto the frame).")
+        mask = df["text"].notna() & (df["text"].astype(str).str.strip() != "")
+        out = np.full((len(df), 4), 0.25, dtype=float)
+        if mask.any() and self.tier_residual_std > 0.0:
+            texts = df.loc[mask, "text"].astype(str).tolist()
+            part = self.model.predict_tier_proba_from_texts(
+                texts,
+                target_mean=self.target_mean,
+                target_std=self.target_std,
+                tier_residual_std=self.tier_residual_std,
+                max_length=self.max_length,
+                batch_size=self.batch_size,
+                device=self.device,
+            )
+            out[np.flatnonzero(mask.to_numpy(dtype=bool))] = part.to_numpy(dtype=float, copy=False)
+        out = normalize_proba(out)
+        return pd.DataFrame(out, columns=PROBA_COLUMNS, index=df.index)
+
+
+def fit_text_tier_bundle_for_multimodal(
+    fold_core: pd.DataFrame,
+    cfg: dict,
+    *,
+    epochs: int | None = None,
+    silent: bool = False,
+) -> TextTierPredictorBundle | UniformTextTierBundle:
+    """Train the scouting text tower on ``fold_core`` (same role as tabular cores in multimodal OOF/final).
+
+    Uses rows with non-empty ``text`` and a valid regression target. Returns a uniform bundle if
+    too few examples exist or if ``regression_target_col`` is not ``nba_role_zscore`` (Gaussian tier map).
+    """
+    text_section: dict = (cfg.get("model") or {}).get("text") or {}
+    train_section: dict = cfg.get("training") or {}
+    mm_section: dict = (cfg.get("model") or {}).get("multimodal") or {}
+
+    pretrained = str(text_section.get("pretrained", "distilbert-base-uncased"))
+    output_dim = int(text_section.get("output_dim", 128))
+    freeze_base = bool(text_section.get("freeze_base", True))
+    max_length = int(text_section.get("max_length", 256))
+    batch_size = int(train_section.get("batch_size", 32))
+    lr = float(text_section.get("lr", train_section.get("lr", 2e-5)))
+    n_epochs = int(epochs if epochs is not None else train_section.get("epochs", 3))
+
+    tail_weight = float(text_section.get("tail_weight", 0.8))
+    variance_penalty = float(text_section.get("variance_penalty", 0.15))
+    edge_oversample_weight = float(text_section.get("edge_oversample_weight", 4.0))
+    overpredict_discount = float(text_section.get("overpredict_discount", 0.35))
+    high_pred_relief = float(text_section.get("high_pred_relief", 0.20))
+    underpredict_high_target_boost = float(text_section.get("underpredict_high_target_boost", 0.60))
+    classification_weight = float(text_section.get("classification_weight", 1.25))
+    star_pos_weight = float(text_section.get("star_pos_weight", 4.0))
+    survived_pos_weight = float(text_section.get("survived_pos_weight", 2.5))
+    starter_pos_weight = float(text_section.get("starter_pos_weight", 2.5))
+    auxiliary_regression_weight = float(text_section.get("auxiliary_regression_weight", 0.25))
+
+    regression_target_col = str(
+        text_section.get("regression_target_col") or TARGET_COL["nba_role_zscore"],
+    )
+    if regression_target_col != TARGET_COL["nba_role_zscore"]:
+        return UniformTextTierBundle()
+
+    need = {"text", "prospect_tier", "survived_3yrs", "became_starter", regression_target_col}
+    missing = need - set(fold_core.columns)
+    if missing:
+        raise KeyError(f"fold_core missing columns for text multimodal bundle: {sorted(missing)}")
+
+    tc = fold_core.copy()
+    tc = tc[tc["text"].notna() & (tc["text"].astype(str).str.strip() != "")]
+    tc = tc.dropna(subset=[regression_target_col])
+    tc[regression_target_col] = tc[regression_target_col].astype(float)
+
+    min_rows = int(mm_section.get("text_min_train_rows", 8))
+    if len(tc) < min_rows:
+        return UniformTextTierBundle()
+
+    tier_col = TARGET_COL["prospect_tier"]
+    val_fraction = float(mm_section.get("text_val_fraction", 0.15))
+    try_strat = len(tc) >= 12 and tc[tier_col].nunique() > 1
+    if try_strat:
+        try:
+            tc_train, tc_val = train_test_split(
+                tc,
+                test_size=val_fraction,
+                stratify=tc[tier_col],
+                random_state=RANDOM_STATE,
+            )
+        except ValueError:
+            tc_train, tc_val = train_test_split(
+                tc, test_size=val_fraction, random_state=RANDOM_STATE,
+            )
+    else:
+        tc_train, tc_val = train_test_split(tc, test_size=val_fraction, random_state=RANDOM_STATE)
+    has_val = len(tc_val) > 0
+
+    device = torch.device("cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu"))
+    encoder = ScoutingReportEncoder(
+        pretrained=pretrained,
+        output_dim=output_dim,
+        freeze_base=freeze_base,
+    )
+    model = TextProspectPredictor(text_encoder=encoder, hidden_dim=64, dropout=0.2).to(device)
+
+    target_mean = float(tc_train[regression_target_col].mean())
+    target_std = float(tc_train[regression_target_col].std(ddof=0) + 1e-8)
+
+    star_train = (tc_train["prospect_tier"] == 3).astype(np.float32)
+    star_val = (tc_val["prospect_tier"] == 3).astype(np.float32) if has_val else np.array([], dtype=np.float32)
+
+    train_ds = _TokenizedTextDataset(
+        tc_train["text"].tolist(),
+        tc_train[regression_target_col].tolist(),
+        tokenizer=encoder.tokenizer,
+        max_length=max_length,
+        target_mean=target_mean,
+        target_std=target_std,
+        star_labels=star_train.tolist(),
+        survived_labels=tc_train["survived_3yrs"].tolist(),
+        starter_labels=tc_train["became_starter"].tolist(),
+    )
+    val_ds = (
+        _TokenizedTextDataset(
+            tc_val["text"].tolist(),
+            tc_val[regression_target_col].tolist(),
+            tokenizer=encoder.tokenizer,
+            max_length=max_length,
+            target_mean=target_mean,
+            target_std=target_std,
+            star_labels=star_val.tolist(),
+            survived_labels=tc_val["survived_3yrs"].tolist(),
+            starter_labels=tc_val["became_starter"].tolist(),
+        )
+        if has_val
+        else None
+    )
+
+    train_sampler = _build_extreme_sampler(
+        tc_train[regression_target_col].to_numpy(dtype=np.float32),
+        edge_weight=edge_oversample_weight,
+    )
+    num_workers = 0
+    if text_section.get("num_workers") is not None:
+        num_workers = max(0, int(float(text_section["num_workers"])))
+    dl_kw: dict[str, Any] = {"num_workers": num_workers}
+    if num_workers > 0:
+        dl_kw["persistent_workers"] = True
+
+    train_loader = DataLoader(train_ds, batch_size=batch_size, sampler=train_sampler, **dl_kw)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, **dl_kw) if val_ds is not None else None
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    criterion = WeightedAntiCollapseLoss(
+        tail_weight=tail_weight,
+        variance_penalty=variance_penalty,
+        use_huber=True,
+        huber_beta=1.0,
+        overpredict_discount=overpredict_discount,
+        high_pred_relief=high_pred_relief,
+        underpredict_high_target_boost=underpredict_high_target_boost,
+        classification_weight=classification_weight,
+        star_pos_weight=star_pos_weight,
+        survived_pos_weight=survived_pos_weight,
+        starter_pos_weight=starter_pos_weight,
+        auxiliary_regression_weight=auxiliary_regression_weight,
+    )
+
+    best_state: dict[str, torch.Tensor] | None = None
+    best_val = float("inf")
+    for epoch in range(1, n_epochs + 1):
+        train_loss = _run_epoch(
+            model, train_loader, optimizer=optimizer, device=device, criterion=criterion,
+        )
+        if val_loader is not None:
+            val_loss = _run_epoch(
+                model, val_loader, optimizer=None, device=device, criterion=criterion,
+            )
+            if val_loss < best_val:
+                best_val = val_loss
+                best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+        else:
+            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+        if not silent:
+            msg = f"[multimodal:text] epoch {epoch:02d}/{n_epochs} train_loss={train_loss:.4f}"
+            if val_loader is not None:
+                msg += f" val_loss={val_loss:.4f}"
+            print(msg)
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+
+    (
+        y_tr_resid,
+        y_tr_pred,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+    ) = _predict(
+        model,
+        train_loader,
+        device=device,
+        target_mean=target_mean,
+        target_std=target_std,
+    )
+    tier_residual_std = max(compute_tier_residual_std(y_tr_resid, y_tr_pred), 1e-8)
+
+    return TextTierPredictorBundle(
+        model,
+        target_mean=target_mean,
+        target_std=target_std,
+        tier_residual_std=tier_residual_std,
+        max_length=max_length,
+        batch_size=batch_size,
+        device=device,
+    )
 
 
 class _TokenizedTextDataset(Dataset):
@@ -935,7 +1204,7 @@ def train_and_evaluate_text_model(
     mlflow.log_metric("best_val_loss", float(best_val))
     if tier_residual_std > 0.0:
         mlflow.log_metric("tier_residual_std", float(tier_residual_std))
-    mlflow.pytorch.log_model(model, artifact_path="model")
+    mlflow.pytorch.log_model(model, name="model")
 
     print("\n" + "=" * 40)
     print("Text Model Test Metrics")
@@ -974,7 +1243,7 @@ def train_and_evaluate_text_model(
         out_csv.to_csv(out_p, index=False)
         print(f"\n[tier_proba] Wrote {len(out_csv)} rows (full text frame) to {out_p}")
         if mlflow.active_run() is not None:
-            mlflow.log_artifact(str(out_p), artifact_path="tier_proba")
+            mlflow.log_artifact(str(out_p), name="tier_proba")
 
     _plot_text_results(
         y_test,
@@ -1012,7 +1281,7 @@ def _plot_text_results(
     plt.savefig(out_path, dpi=150)
     print(f"\nPlot saved to {out_path}")
     if mlflow.active_run() is not None:
-        mlflow.log_artifact(str(out_path), artifact_path="plots")
+        mlflow.log_artifact(str(out_path), name="plots")
 
     plt.figure(figsize=(7, 4))
     epochs = range(1, len(history["train_loss"]) + 1)
@@ -1027,7 +1296,7 @@ def _plot_text_results(
     plt.savefig(loss_out_path, dpi=150)
     print(f"Plot saved to {loss_out_path}")
     if mlflow.active_run() is not None:
-        mlflow.log_artifact(str(loss_out_path), artifact_path="plots")
+        mlflow.log_artifact(str(loss_out_path), name="plots")
 
 
 if __name__ == "__main__":

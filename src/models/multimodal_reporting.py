@@ -8,6 +8,7 @@ import pandas as pd
 from sklearn.metrics import confusion_matrix
 
 from src.models.probability import PROBA_COLUMNS, TIER_CLASS_NAMES
+from src.models.text_model import attach_scouting_text_columns
 from src.training.evaluate import ordinal_classification_metrics
 from src.utils.plotting import (
     plot_best_hits_probability_bars,
@@ -94,29 +95,30 @@ def build_model_summary(model, test_df: pd.DataFrame, y_test, y_pred, test_proba
     rows = [_summary_row("multimodal__stacker", "multimodal", y_test, y_pred, test_proba)]
     base_rows = []
 
+    comp = ((getattr(model, "cfg", None) or {}).get("model") or {}).get("composite_score")
+    test_in = (
+        attach_scouting_text_columns(test_df, comp)
+        if getattr(model, "final_text_bundles", None)
+        else test_df
+    )
+
     for key in model.clf_models:
         bundle = model.final_clf_bundles[key]
-        proba = bundle.predict_tier_proba(test_df)
+        proba = bundle.predict_tier_proba(test_in)
         y_hat = np.argmax(proba.values, axis=1)
         base_rows.append(_summary_row(f"classification__{key}", "classification", y_test, y_hat, proba.values))
 
     for key in model.reg_models:
         bundle = model.final_reg_bundles[key]
-        proba = bundle.predict_tier_proba(test_df)
+        proba = bundle.predict_tier_proba(test_in)
         y_hat = np.argmax(proba.values, axis=1)
         base_rows.append(_summary_row(f"regression__{key}", "regression", y_test, y_hat, proba.values))
 
-    text_key = getattr(model, "text_meta_key", None)
-    lookup = getattr(model, "_text_lookup", None)
-    if text_key and lookup is not None:
-        from src.models.multimodal import _text_proba_for_ids  # noqa: PLC0415
-
-        tcols = _text_proba_for_ids(test_df, lookup, text_key)
-        tproba = tcols.rename(
-            columns={f"text__{text_key}__{c}": c for c in PROBA_COLUMNS},
-        )[list(PROBA_COLUMNS)]
-        y_hat_t = np.argmax(tproba.values, axis=1)
-        base_rows.append(_summary_row(f"text__{text_key}", "text", y_test, y_hat_t, tproba.values))
+    for key in getattr(model, "text_models", []):
+        bundle = model.final_text_bundles[key]
+        proba = bundle.predict_tier_proba(test_in)
+        y_hat = np.argmax(proba.values, axis=1)
+        base_rows.append(_summary_row(f"text__{key}", "text", y_test, y_hat, proba.values))
 
     return pd.DataFrame(rows + base_rows), pd.DataFrame(base_rows)
 
@@ -188,9 +190,7 @@ def build_stacker_contributions(model) -> pd.DataFrame:
 
     base_models = [f"classification__{key}" for key in model.clf_models]
     base_models += [f"regression__{key}" for key in model.reg_models]
-    text_key = getattr(model, "text_meta_key", None)
-    if text_key:
-        base_models.append(f"text__{text_key}")
+    base_models += [f"text__{key}" for key in getattr(model, "text_models", [])]
     out = pd.DataFrame(0.0, index=base_models, columns=TIER_CLASS_NAMES)
 
     for class_pos, cls in enumerate(classes):

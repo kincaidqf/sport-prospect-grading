@@ -81,7 +81,7 @@ model:
     regression_target_col: nba_role_zscore
     tier_proba_csv_path: null  # e.g. outputs/text_tier_proba_full.csv — all (Name, draft_year) with text; use with multimodal
 
-  # Probability stacking: stats base models + optional text tier CSV. Lower cv_folds / lighter oof_params if the OS kills the process.
+  # Probability stacking: tabular clf/reg + scouting text, each with OOF meta features then a final refit.
   multimodal:
     cv_folds: 3
     output_dir: outputs/multimodal
