@@ -19,7 +19,7 @@ def test_parse_args_defaults():
 
 def test_parse_args_model_choices():
     from src.main import parse_args
-    for model in ("regression", "classification", "text"):
+    for model in ("regression", "classification", "text", "text_shallow", "multimodal"):
         with patch.object(sys, "argv", ["main.py", "--model", model]):
             args = parse_args()
         assert args.model == model
@@ -29,7 +29,7 @@ def test_parse_args_rejects_unknown_model():
     from src.main import parse_args
     import pytest
     with pytest.raises(SystemExit):
-        with patch.object(sys, "argv", ["main.py", "--model", "multimodal"]):
+        with patch.object(sys, "argv", ["main.py", "--model", "unknown_model"]):
             parse_args()
 
 

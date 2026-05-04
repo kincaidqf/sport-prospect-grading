@@ -22,6 +22,12 @@ def test_text_model_imports():
     assert callable(tm.load_text_data)
 
 
+def test_simple_text_model_imports():
+    import src.models.simple_text_model as stm
+    assert callable(stm.train_and_evaluate_shallow_text_model)
+    assert callable(stm.fit_shallow_text_tier_bundle_for_multimodal)
+
+
 def test_regression_run_signature():
     import src.models.regression_model as rm
     sig = inspect.signature(rm.run)

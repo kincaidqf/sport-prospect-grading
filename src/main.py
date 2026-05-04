@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--config", default="src/config/config.yaml")
     p.add_argument(
         "--model",
-        choices=["regression", "classification", "text", "multimodal"],
+        choices=["regression", "classification", "text", "text_shallow", "multimodal"],
         default=None,
         help="Override model.type from config",
     )
@@ -139,6 +139,15 @@ def main() -> None:
             run_name=args.run_name,
             tracking_uri=args.tracking_uri,
             regression_target_col=text_cfg.get("regression_target_col"),
+            tier_proba_csv_path=text_cfg.get("tier_proba_csv_path"),
+        )
+    elif model_type == "text_shallow":
+        import src.models.simple_text_model as stm
+        text_cfg = cfg["model"].get("text", {})
+        stm.train_and_evaluate_shallow_text_model(
+            cfg=cfg,
+            run_name=args.run_name,
+            tracking_uri=args.tracking_uri,
             tier_proba_csv_path=text_cfg.get("tier_proba_csv_path"),
         )
     else:

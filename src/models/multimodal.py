@@ -33,12 +33,14 @@ from src.models.classification_model import (
     train_selected_classification_models,
 )
 from src.models.probability import PROBA_COLUMNS, TIER_CLASS_NAMES, BaseModelBundle
+from src.models.simple_text_model import fit_shallow_text_tier_bundle_for_multimodal
 from src.models.text_model import attach_scouting_text_columns, fit_text_tier_bundle_for_multimodal
 from src.models.regression_model import (
     REGRESSION_MODEL_REGISTRY,
     train_selected_regression_models,
 )
 from src.models.multimodal_reporting import write_multimodal_report
+from src.models.multimodal_text_towers import resolve_text_stack
 from src.training.evaluate import ordinal_classification_metrics
 from src.utils.mlflow_utils import (
     build_mlflow_context,
@@ -109,6 +111,46 @@ def _make_task_cfg(cfg: dict, task: str, mm_cfg: dict) -> dict:
     return out
 
 
+def train_selected_text_models(
+    train_df: pd.DataFrame,
+    cfg: dict,
+    tower_specs: list[dict],
+    *,
+    epochs: int,
+    silent: bool,
+) -> dict[str, object]:
+    """Train each selected text base model (transformer and/or shallow), mirroring
+    :func:`train_selected_classification_models` / :func:`train_selected_regression_models`.
+
+    Each entry in ``tower_specs`` is ``{meta_key, type, shallow}`` from
+    :func:`resolve_text_stack`.
+    """
+    bundles: dict[str, object] = {}
+    for tower in tower_specs:
+        meta_key = tower["meta_key"]
+        typ = str(tower["type"]).strip().lower()
+        if typ in ("shallow_lexicon", "shallow"):
+            bundles[meta_key] = fit_shallow_text_tier_bundle_for_multimodal(
+                train_df,
+                cfg,
+                shallow_cfg=tower.get("shallow") or {},
+                silent=silent,
+            )
+        elif typ == "transformer":
+            bundles[meta_key] = fit_text_tier_bundle_for_multimodal(
+                train_df,
+                cfg,
+                epochs=epochs,
+                silent=silent,
+            )
+        else:
+            raise ValueError(
+                f"Unknown text model type {typ!r} for meta_key={meta_key!r}; "
+                "use transformer, shallow_lexicon, or shallow.",
+            )
+    return bundles
+
+
 class MultimodalProspectModel:
     def __init__(self, cfg: dict) -> None:
         self.cfg = cfg
@@ -129,8 +171,11 @@ class MultimodalProspectModel:
         xgb_cfg = mm_cfg.get("xgboost", {}) or {}
         self.pretune_oof = bool(xgb_cfg.get("pretune_oof_params", False))
 
-        self.text_meta_key: str = str(mm_cfg.get("text_meta_key", "scouting")).strip() or "scouting"
-        self.text_models: list[str] = [self.text_meta_key]
+        self.text_models, self._text_towers = resolve_text_stack(mm_cfg)
+        declared_meta = str(mm_cfg.get("text_meta_key") or "").strip()
+        self.text_meta_key: str = (
+            declared_meta if declared_meta else (self.text_models[0] if self.text_models else "scouting")
+        )
         self._composite_cfg = (cfg.get("model") or {}).get("composite_score")
         train_cfg = cfg.get("training") or {}
         oof_ep = mm_cfg.get("text_oof_epochs")
@@ -187,10 +232,13 @@ class MultimodalProspectModel:
             _append_bundle_proba(meta_train, clf_bundles, "classification", self.clf_models, fold_val)
             _append_bundle_proba(meta_train, reg_bundles, "regression",     self.reg_models, fold_val)
 
-            text_bundle = fit_text_tier_bundle_for_multimodal(
-                fold_core, self.cfg, epochs=self.text_oof_epochs, silent=True,
+            text_bundles = train_selected_text_models(
+                fold_core,
+                self.cfg,
+                self._text_towers,
+                epochs=self.text_oof_epochs,
+                silent=True,
             )
-            text_bundles = {self.text_meta_key: text_bundle}
             _append_bundle_proba(meta_train, text_bundles, "text", self.text_models, fold_val)
             print(f"[multimodal] OOF fold {fold_idx + 1}/{self.cv_folds}: tabular + text tower fitted")
 
@@ -216,11 +264,13 @@ class MultimodalProspectModel:
             mlflow_ctx=mlflow_ctx,
         )
         train_ep = int((self.cfg.get("training") or {}).get("epochs", 3))
-        self.final_text_bundles = {
-            self.text_meta_key: fit_text_tier_bundle_for_multimodal(
-                final_core, self.cfg, epochs=train_ep, silent=False,
-            ),
-        }
+        self.final_text_bundles = train_selected_text_models(
+            final_core,
+            self.cfg,
+            self._text_towers,
+            epochs=train_ep,
+            silent=False,
+        )
 
     def meta_features(self, df: pd.DataFrame) -> pd.DataFrame:
         df_in = attach_scouting_text_columns(df, self._composite_cfg)
@@ -340,6 +390,8 @@ def run(df=None, cfg=None, run_name=None, tracking_uri=None):
             "clf_models":      str(model.clf_models),
             "reg_models":      str(model.reg_models),
             "text_models":     str(model.text_models),
+            "text_towers":     str(model._text_towers),
+            "text_backends":   str(model._mm_cfg.get("text_backends") or {}),
             "text_oof_epochs": model.text_oof_epochs,
             "cal_size":        model.cal_size,
             "pretune_oof":     model.pretune_oof,
