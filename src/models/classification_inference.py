@@ -115,7 +115,6 @@ def get_prospect_tier_labels(df: pd.DataFrame, target_col: str = "prospect_tier"
     """Return the prospect_tier column from a loaded DataFrame.
 
     This is the canonical label used by stats, text, and multimodal models.
-    Text model TODO: switch target from PLUS_MINUS to this column.
     """
     if target_col not in df.columns:
         raise KeyError(

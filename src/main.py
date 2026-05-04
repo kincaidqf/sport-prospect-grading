@@ -120,17 +120,20 @@ def main() -> None:
     elif model_type == "text":
         import src.models.text_model as tm
         text_cfg = cfg["model"].get("text", {})
+        train_cfg = cfg.get("training") or {}
         tm.train_and_evaluate_text_model(
             pretrained=text_cfg.get("pretrained", "distilbert-base-uncased"),
-            output_dim=text_cfg.get("output_dim", 128),
-            freeze_base=text_cfg.get("freeze_base", False),
-            max_length=text_cfg.get("max_length", 512),
-            batch_size=cfg["training"].get("batch_size", 16),
-            epochs=cfg["training"].get("epochs", 3),
-            lr=cfg["training"].get("lr", 2e-5),
+            output_dim=int(text_cfg.get("output_dim", 128)),
+            freeze_base=bool(text_cfg.get("freeze_base", True)),
+            max_length=int(text_cfg.get("max_length", 256)),
+            batch_size=int(train_cfg.get("batch_size", 32)),
+            epochs=int(train_cfg.get("epochs", 3)),
+            lr=float(train_cfg.get("lr", 1e-3)),
             cfg=cfg,
             run_name=args.run_name,
             tracking_uri=args.tracking_uri,
+            regression_target_col=text_cfg.get("regression_target_col"),
+            tier_proba_csv_path=text_cfg.get("tier_proba_csv_path"),
         )
     else:
         raise ValueError(f"Unknown model type: {model_type}")

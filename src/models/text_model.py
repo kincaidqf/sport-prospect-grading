@@ -26,6 +26,8 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from transformers import AutoModel, AutoTokenizer
 
+from src.data.loader import CACHE_DIR, TARGET_COL, load_data
+from src.models.probability import TIER_THRESHOLDS, proba_to_dataframe, zscore_to_tier_proba
 from src.utils.mlflow_utils import (
     build_mlflow_context,
     log_common_params,
@@ -33,6 +35,9 @@ from src.utils.mlflow_utils import (
     log_epoch_metrics,
     managed_run,
 )
+
+# Default regression target; same column used by stats regression for Gaussian tier probabilities.
+TARGET = TARGET_COL["nba_role_zscore"]
 
 
 class ScoutingReportEncoder(nn.Module):
@@ -183,12 +188,40 @@ class TextProspectPredictor(nn.Module):
             self.train()
         return preds
 
+    @torch.no_grad()
+    def predict_tier_proba_from_texts(
+        self,
+        texts: Sequence[str],
+        *,
+        target_mean: float,
+        target_std: float,
+        tier_residual_std: float,
+        max_length: int = 512,
+        batch_size: int = 32,
+        device: torch.device | None = None,
+    ) -> pd.DataFrame:
+        """Return ``PROBA_COLUMNS`` tier probabilities from text (multimodal / PSM).
+
+        Denormalizes the regression head with ``target_mean`` / ``target_std`` then
+        applies the same Gaussian CDF mapping as stats regression bundles. Use
+        ``tier_residual_std`` from the training checkpoint (or recompute on a
+        calibration split).
+        """
+        raw = self.predict_from_texts(
+            texts,
+            max_length=max_length,
+            batch_size=batch_size,
+            device=device,
+        )
+        if raw.numel() == 0:
+            return proba_to_dataframe(np.zeros((0, 4), dtype=np.float64))
+        z = raw.numpy().astype(float) * float(target_std) + float(target_mean)
+        return predict_tier_proba_from_role_z(z, tier_residual_std)
+
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SCOUTING_PATH = os.path.join(PROJECT_ROOT, "data", "scouting", "players.csv")
-NBA_PATH = os.path.join(PROJECT_ROOT, "data", "nba", "nba_stats_best_season_vorp.csv")
-SEASON_CACHE_DIR = os.path.join(PROJECT_ROOT, "data", "nba", "season_cache")
-TARGET = "VORP"
+
 
 def _clean_player_name(name: str) -> str:
     """Normalize scouting CSV names like '2 - KJ Simpson' to plain player names."""
@@ -197,34 +230,31 @@ def _clean_player_name(name: str) -> str:
     return re.sub(r"\s+", " ", name).strip()
 
 
-def load_text_data() -> pd.DataFrame:
-    """Merge scouting reports with NBA outcomes."""
+def load_text_data(composite_cfg: dict | None = None) -> pd.DataFrame:
+    """Merge scouting report text onto the canonical NCAA+NBA frame from ``load_data``.
+
+    Carries ``prospect_tier`` and ``nba_role_zscore`` (and related columns) so labels
+    match the stats-based classification/regression pipelines.
+    """
+    canonical = load_data(composite_cfg=composite_cfg)
     scouting = pd.read_csv(SCOUTING_PATH)
-    nba = pd.read_csv(NBA_PATH)
-
-    scouting["player_name"] = scouting["name"].map(_clean_player_name)
     scouting["draft_year"] = pd.to_numeric(scouting["draft_year"], errors="coerce")
-    nba["draft_year"] = pd.to_numeric(nba["draft_year"], errors="coerce")
+    scouting["Name"] = scouting["name"].map(_clean_player_name)
+    scouting = scouting.dropna(subset=["Name", "draft_year", "full_scouting_report"])
+    scouting["text"] = scouting["full_scouting_report"].astype(str).str.strip()
+    scouting = scouting[scouting["text"] != ""].copy()
+    scouting = scouting.drop_duplicates(subset=["Name", "draft_year"], keep="first")
 
-    scouting = scouting.dropna(subset=["player_name", "draft_year", "full_scouting_report"])
-    nba = nba.dropna(subset=["player_name", "draft_year", TARGET])
-
-    merged = scouting.merge(
-        nba[["player_name", "draft_year", TARGET, "MIN", "player_id"]],
-        on=["player_name", "draft_year"],
+    merged = canonical.merge(
+        scouting[["Name", "draft_year", "text"]],
+        on=["Name", "draft_year"],
         how="inner",
     )
-
-    merged["text"] = merged["full_scouting_report"].astype(str).str.strip()
-    merged = merged[merged["text"] != ""].copy()
-    merged = merged.drop_duplicates(subset=["player_name", "draft_year"], keep="first")
-    merged[TARGET] = merged[TARGET].astype(float)
     merged["draft_year"] = merged["draft_year"].astype(int)
     merged["MIN"] = pd.to_numeric(merged["MIN"], errors="coerce").fillna(0.0)
-    merged["became_starter"] = (merged["MIN"] >= 25.0).astype(int)
 
     # Derive survival labels from cached season participation.
-    season_files = glob.glob(os.path.join(SEASON_CACHE_DIR, "*.csv"))
+    season_files = glob.glob(os.path.join(CACHE_DIR, "*.csv"))
     if season_files:
         all_seasons = pd.concat(
             [pd.read_csv(f, usecols=["PLAYER_ID", "SEASON_ID"]) for f in season_files],
@@ -249,6 +279,33 @@ def load_text_data() -> pd.DataFrame:
     return merged
 
 
+def compute_tier_residual_std(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Training residual std in the regression target's native units (e.g. ``nba_role_zscore``)."""
+    return float(np.std(np.asarray(y_true, dtype=float) - np.asarray(y_pred, dtype=float), ddof=0))
+
+
+def predict_tier_proba_from_role_z(
+    role_z_pred: np.ndarray,
+    tier_residual_std: float,
+    *,
+    thresholds: tuple = TIER_THRESHOLDS,
+) -> pd.DataFrame:
+    """Map predicted NBA role z-scores to calibrated 4-class tier probabilities.
+
+    Uses the same Gaussian CDF layer as stats regression bundles
+    (:func:`src.models.probability.zscore_to_tier_proba`) so columns match
+    ``PROBA_COLUMNS`` for multimodal stacking.
+    """
+    if tier_residual_std <= 0.0:
+        raise ValueError("tier_residual_std must be positive for tier probability export.")
+    proba = zscore_to_tier_proba(
+        np.asarray(role_z_pred, dtype=float),
+        float(tier_residual_std),
+        thresholds,
+    )
+    return proba_to_dataframe(proba)
+
+
 class _TokenizedTextDataset(Dataset):
     """Tokenized text dataset for multi-task outcomes."""
 
@@ -260,7 +317,7 @@ class _TokenizedTextDataset(Dataset):
         max_length: int = 256,
         target_mean: float | None = None,
         target_std: float | None = None,
-        star_threshold_raw: float | None = None,
+        star_labels: Sequence[float] | None = None,
         survived_labels: Sequence[float] | None = None,
         starter_labels: Sequence[float] | None = None,
     ) -> None:
@@ -275,18 +332,9 @@ class _TokenizedTextDataset(Dataset):
         if target_mean is not None and target_std is not None and target_std > 0:
             targets_arr = (targets_arr - target_mean) / target_std
         self.targets = torch.tensor(targets_arr, dtype=torch.float32)
-        raw_targets_arr = np.asarray(targets, dtype=np.float32)
-        effective_star_threshold = (
-            float(np.quantile(raw_targets_arr, 0.90))
-            if star_threshold_raw is None
-            else float(star_threshold_raw)
-        )
-        self.star_labels = torch.tensor(
-            (raw_targets_arr >= effective_star_threshold).astype(np.float32),
-            dtype=torch.float32,
-        )
-        if survived_labels is None or starter_labels is None:
-            raise ValueError("survived_labels and starter_labels are required.")
+        if star_labels is None or survived_labels is None or starter_labels is None:
+            raise ValueError("star_labels, survived_labels, and starter_labels are required.")
+        self.star_labels = torch.tensor(np.asarray(star_labels, dtype=np.float32), dtype=torch.float32)
         self.survived_labels = torch.tensor(
             np.asarray(survived_labels, dtype=np.float32),
             dtype=torch.float32,
@@ -596,9 +644,9 @@ def _build_extreme_sampler(
 def train_and_evaluate_text_model(
     pretrained: str = "distilbert-base-uncased",
     output_dim: int = 128,
-    freeze_base: bool = False,
+    freeze_base: bool = True,
     max_length: int = 256,
-    batch_size: int = 16,
+    batch_size: int = 32,
     epochs: int = 3,
     lr: float = 2e-5,
     cfg: dict | None = None,
@@ -618,13 +666,46 @@ def train_and_evaluate_text_model(
     survived_pos_weight: float = 2.5,
     starter_pos_weight: float = 2.5,
     auxiliary_regression_weight: float = 0.25,
+    regression_target_col: str | None = None,
+    tier_proba_csv_path: str | None = None,
     save_path: str | None = None,
 ) -> tuple[TextProspectPredictor, dict[str, float]]:
-    """Train/evaluate text-only predictor using scouting report text."""
+    """Train/evaluate text-only predictor using scouting report text.
+
+    When ``regression_target_col`` is ``nba_role_zscore`` (default), training
+    residuals yield ``tier_residual_std`` for exporting 4-class probabilities
+    compatible with multimodal meta-features (``tier_proba_csv_path``).
+    """
+    # Callers often pass YAML-loaded values: PyYAML 1.1 can leave scientific notation
+    # (e.g. ``1e-3``) as str, which breaks torch optimizers.
+    lr = float(lr)
+    batch_size = int(batch_size)
+    epochs = int(epochs)
+    max_length = int(max_length)
+    output_dim = int(output_dim)
+    freeze_base = bool(freeze_base)
+
     if train_frac <= 0 or val_frac <= 0 or (train_frac + val_frac) >= 1:
         raise ValueError("train_frac and val_frac must be > 0 and sum to < 1.")
 
-    df = load_text_data()
+    composite_cfg = None
+    text_section: dict = {}
+    if cfg is not None:
+        composite_cfg = (cfg.get("model") or {}).get("composite_score")
+        text_section = (cfg.get("model") or {}).get("text") or {}
+
+    if text_section.get("edge_oversample_weight") is not None:
+        edge_oversample_weight = float(text_section["edge_oversample_weight"])
+
+    regression_target_col = regression_target_col or TARGET_COL["nba_role_zscore"]
+    df = load_text_data(composite_cfg=composite_cfg)
+    if regression_target_col not in df.columns:
+        raise KeyError(
+            f"regression_target_col={regression_target_col!r} not in merged text frame; "
+            f"choose one of the numeric targets present in load_data() (e.g. nba_role_zscore)."
+        )
+    df = df.dropna(subset=[regression_target_col]).copy()
+    df[regression_target_col] = df[regression_target_col].astype(float)
     train_df, temp_df = train_test_split(
         df,
         train_size=train_frac,
@@ -655,58 +736,69 @@ def train_and_evaluate_text_model(
     )
     model = TextProspectPredictor(text_encoder=encoder, hidden_dim=64, dropout=0.2).to(device)
 
-    target_mean = float(train_df[TARGET].mean())
-    target_std = float(train_df[TARGET].std(ddof=0) + 1e-8)
-    star_threshold = float(train_df[TARGET].quantile(0.90))
+    target_mean = float(train_df[regression_target_col].mean())
+    target_std = float(train_df[regression_target_col].std(ddof=0) + 1e-8)
+    star_train = (train_df["prospect_tier"] == 3).astype(np.float32)
+    star_val = (val_df["prospect_tier"] == 3).astype(np.float32)
+    star_test = (test_df["prospect_tier"] == 3).astype(np.float32)
 
     train_ds = _TokenizedTextDataset(
         train_df["text"].tolist(),
-        train_df[TARGET].tolist(),
+        train_df[regression_target_col].tolist(),
         tokenizer=encoder.tokenizer,
         max_length=max_length,
         target_mean=target_mean,
         target_std=target_std,
-        star_threshold_raw=star_threshold,
+        star_labels=star_train.tolist(),
         survived_labels=train_df["survived_3yrs"].tolist(),
         starter_labels=train_df["became_starter"].tolist(),
     )
     val_ds = _TokenizedTextDataset(
         val_df["text"].tolist(),
-        val_df[TARGET].tolist(),
+        val_df[regression_target_col].tolist(),
         tokenizer=encoder.tokenizer,
         max_length=max_length,
         target_mean=target_mean,
         target_std=target_std,
-        star_threshold_raw=star_threshold,
+        star_labels=star_val.tolist(),
         survived_labels=val_df["survived_3yrs"].tolist(),
         starter_labels=val_df["became_starter"].tolist(),
     )
     test_ds = _TokenizedTextDataset(
         test_df["text"].tolist(),
-        test_df[TARGET].tolist(),
+        test_df[regression_target_col].tolist(),
         tokenizer=encoder.tokenizer,
         max_length=max_length,
         target_mean=target_mean,
         target_std=target_std,
-        star_threshold_raw=star_threshold,
+        star_labels=star_test.tolist(),
         survived_labels=test_df["survived_3yrs"].tolist(),
         starter_labels=test_df["became_starter"].tolist(),
     )
 
     train_sampler = _build_extreme_sampler(
-        train_df[TARGET].to_numpy(dtype=np.float32),
+        train_df[regression_target_col].to_numpy(dtype=np.float32),
         edge_weight=edge_oversample_weight,
     )
-    train_loader = DataLoader(train_ds, batch_size=batch_size, sampler=train_sampler)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
+    num_workers = 0
+    if text_section.get("num_workers") is not None:
+        num_workers = max(0, int(float(text_section["num_workers"])))
+    dl_kw: dict = {"num_workers": num_workers}
+    if num_workers > 0:
+        dl_kw["persistent_workers"] = True
+
+    train_loader = DataLoader(
+        train_ds, batch_size=batch_size, sampler=train_sampler, **dl_kw
+    )
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, **dl_kw)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, **dl_kw)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     history = {"train_loss": [], "val_loss": []}
     mlflow_ctx = build_mlflow_context(
         cfg=cfg,
         model_type="text",
-        target_name=TARGET,
+        target_name=regression_target_col,
         fallback_experiment_name="nba-draft-prospect-text",
         tracking_uri=tracking_uri,
         run_name=run_name,
@@ -718,7 +810,7 @@ def train_and_evaluate_text_model(
         log_common_params(
             {
                 "model_family": "text",
-                "target": TARGET,
+                "target": regression_target_col,
                 "pretrained": pretrained,
                 "output_dim": output_dim,
                 "freeze_base": freeze_base,
@@ -767,6 +859,26 @@ def train_and_evaluate_text_model(
         if best_state is not None:
             model.load_state_dict(best_state)
 
+        (
+            y_tr_resid,
+            y_tr_pred,
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+        ) = _predict(
+            model,
+            train_loader,
+            device=device,
+            target_mean=target_mean,
+            target_std=target_std,
+        )
+        tier_residual_std = 0.0
+        if regression_target_col == TARGET_COL["nba_role_zscore"]:
+            tier_residual_std = max(compute_tier_residual_std(y_tr_resid, y_tr_pred), 1e-8)
+
         if save_path:
             ckpt_parent = os.path.dirname(os.path.abspath(save_path))
             if ckpt_parent:
@@ -776,7 +888,9 @@ def train_and_evaluate_text_model(
                     "model_state": model.state_dict(),
                     "target_mean": target_mean,
                     "target_std": target_std,
-                    "star_threshold": star_threshold,
+                    "regression_target_col": regression_target_col,
+                    "tier_residual_std": tier_residual_std,
+                    "star_threshold": float("nan"),
                     "pretrained": pretrained,
                     "output_dim": output_dim,
                     "freeze_base": freeze_base,
@@ -814,8 +928,12 @@ def train_and_evaluate_text_model(
         starter_prob=starter_prob,
         starter_true=starter_true,
     )
+    if tier_residual_std > 0.0:
+        metrics["tier_residual_std"] = float(tier_residual_std)
     mlflow.log_metrics(metrics)
     mlflow.log_metric("best_val_loss", float(best_val))
+    if tier_residual_std > 0.0:
+        mlflow.log_metric("tier_residual_std", float(tier_residual_std))
     mlflow.pytorch.log_model(model, artifact_path="model")
 
     print("\n" + "=" * 40)
@@ -828,7 +946,32 @@ def train_and_evaluate_text_model(
     print(f"survived_3yrs   | AUC={metrics['survived_auc']:.4f} AP={metrics['survived_ap']:.4f} ACC={metrics['survived_acc']:.4f}")
     print(f"became_starter  | AUC={metrics['starter_auc']:.4f} AP={metrics['starter_ap']:.4f} ACC={metrics['starter_acc']:.4f}")
 
-    _plot_text_results(y_test, y_pred, history, plot_dir=mlflow_ctx.plot_dir)
+    if tier_proba_csv_path and regression_target_col != TARGET_COL["nba_role_zscore"]:
+        print(
+            "[tier_proba] Skipped CSV export: Gaussian tier probabilities require "
+            "regression_target_col='nba_role_zscore' (stats regression alignment)."
+        )
+    if tier_proba_csv_path and regression_target_col == TARGET_COL["nba_role_zscore"] and tier_residual_std > 0.0:
+        proba_df = predict_tier_proba_from_role_z(y_pred, tier_residual_std)
+        id_cols = [c for c in ("Name", "draft_year") if c in test_df.columns]
+        out_csv = pd.concat(
+            [test_df[id_cols].reset_index(drop=True), proba_df.reset_index(drop=True)],
+            axis=1,
+        )
+        out_p = Path(tier_proba_csv_path)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        out_csv.to_csv(out_p, index=False)
+        print(f"\n[tier_proba] Wrote {len(out_csv)} rows to {out_p}")
+        if mlflow.active_run() is not None:
+            mlflow.log_artifact(str(out_p), artifact_path="tier_proba")
+
+    _plot_text_results(
+        y_test,
+        y_pred,
+        history,
+        plot_dir=mlflow_ctx.plot_dir,
+        regression_target_col=regression_target_col,
+    )
     return model, metrics
 
 
@@ -837,6 +980,7 @@ def _plot_text_results(
     y_pred: np.ndarray,
     history: dict[str, list[float]],
     plot_dir: str,
+    regression_target_col: str,
 ) -> None:
     plot_path = Path(plot_dir)
     plot_path.mkdir(parents=True, exist_ok=True)
@@ -846,9 +990,9 @@ def _plot_text_results(
     upperLim = max(abs(float(np.max(y_true))), abs(float(np.max(y_pred)))) + 1
     bottomLim = min(float(np.min(y_true)), float(np.min(y_pred))) - 1
     plt.plot([bottomLim, upperLim], [bottomLim, upperLim], "r--", linewidth=1, label="Perfect prediction")
-    plt.xlabel("Actual VORP")
-    plt.ylabel("Predicted VORP")
-    plt.title("Text Model: Scouting Report to NBA VORP")
+    plt.xlabel(f"Actual {regression_target_col}")
+    plt.ylabel(f"Predicted {regression_target_col}")
+    plt.title(f"Text model: scouting report → {regression_target_col}")
     plt.legend(fontsize=8)
     plt.xlim(bottomLim, upperLim)
     plt.ylim(bottomLim, upperLim)

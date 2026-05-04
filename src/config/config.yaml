@@ -76,15 +76,39 @@ model:
   text:
     pretrained: "distilbert-base-uncased"
     output_dim: 128
-    max_length: 512
+    max_length: 256
     freeze_base: false
+    regression_target_col: nba_role_zscore
+    tier_proba_csv_path: null  # e.g. outputs/text_tier_proba_test.csv — multimodal meta-features
+
+  # Probability stacking (stats-only). Lower cv_folds / lighter oof_params if the OS kills the process.
+  multimodal:
+    cv_folds: 3
+    output_dir: outputs/multimodal
+    calibration:
+      method: sigmoid
+      calibration_size: 0.15
+    xgboost:
+      pretune_oof_params: false
+      # Used only for multimodal OOF + final XGB fits (use_fixed_xgb_params=True). Smaller + hist = less RAM.
+      oof_params:
+        n_estimators: 100
+        max_depth: 3
+        learning_rate: 0.1
+        subsample: 0.85
+        colsample_bytree: 0.9
+        min_child_weight: 5
+        reg_alpha: 0.1
+        reg_lambda: 5
+        gamma: 0
+        tree_method: hist
 
 training:
-  batch_size: 32
+  batch_size: 48
   lr: 1e-3
   weight_decay: 1e-4
-  epochs: 50
-  early_stopping_patience: 10
+  epochs: 10
+  early_stopping_patience: 3
   grad_clip: 1.0
   seed: 42
 
@@ -93,8 +117,8 @@ data:
   scouting_path: data/scouting/scouting_texts.txt
   nba_path: data/nba/nba_master.csv
   ncaa_path: data/ncaa/ncaa_master.csv
-  best_season_mode: composite  # composite | vorp — controls which of a player's first 3 NBA seasons is kept as "best" when running fetch_nba_stats.py / recover_nba_players.py
-  target_col: PLUS_MINUS      # NBA performance target (set to VORP with *_vorp.csv)
+  best_season_mode: composite  # composite | vorp | darko — best of first 3 NBA seasons (fetch_nba_stats.py / recover_nba_players.py)
+  target_col: PLUS_MINUS      # NBA target: PLUS_MINUS | VORP (*_vorp.csv) | DPM (*_darko.csv)
   test_split: 0.15
   val_split: 0.15
   num_workers: 4
