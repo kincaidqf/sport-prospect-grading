@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--config", default="src/config/config.yaml")
     p.add_argument(
         "--model",
-        choices=["regression", "classification", "text", "multimodal"],
+        choices=["regression", "classification", "text", "text_shallow", "multimodal"],
         default=None,
         help="Override model.type from config",
     )
@@ -123,16 +123,31 @@ def main() -> None:
         train_cfg = cfg.get("training") or {}
         tm.train_and_evaluate_text_model(
             pretrained=text_cfg.get("pretrained", "distilbert-base-uncased"),
-            output_dim=int(text_cfg.get("output_dim", 128)),
+            output_dim=int(text_cfg.get("output_dim", 64)),
+            hidden_dim=int(text_cfg.get("hidden_dim", 32)),
+            dropout=float(text_cfg.get("dropout", 0.2)),
             freeze_base=bool(text_cfg.get("freeze_base", True)),
-            max_length=int(text_cfg.get("max_length", 256)),
+            max_length=int(text_cfg.get("max_length", 128)),
+            huber_beta=float(text_cfg.get("huber_beta", 1.0)),
+            task=text_cfg.get("task"),
+            classification_target_col=text_cfg.get("classification_target_col"),
+            num_classes=int(text_cfg.get("num_classes", 4)),
             batch_size=int(train_cfg.get("batch_size", 32)),
-            epochs=int(train_cfg.get("epochs", 3)),
+            epochs=int(train_cfg.get("epochs", 10)),
             lr=float(train_cfg.get("lr", 1e-3)),
             cfg=cfg,
             run_name=args.run_name,
             tracking_uri=args.tracking_uri,
             regression_target_col=text_cfg.get("regression_target_col"),
+            tier_proba_csv_path=text_cfg.get("tier_proba_csv_path"),
+        )
+    elif model_type == "text_shallow":
+        import src.models.simple_text_model as stm
+        text_cfg = cfg["model"].get("text", {})
+        stm.train_and_evaluate_shallow_text_model(
+            cfg=cfg,
+            run_name=args.run_name,
+            tracking_uri=args.tracking_uri,
             tier_proba_csv_path=text_cfg.get("tier_proba_csv_path"),
         )
     else:

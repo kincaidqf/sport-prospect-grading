@@ -2,7 +2,7 @@ defaults:
   - _self_
 
 model:
-  type: regression          # regression | classification | text
+  type: regression          # regression | classification | text | text_shallow | multimodal
   prospect_context_mode: individual  # individual | composite | both | none
   input_normalization_mode: global   # global | position_relative
   nba_role_score:
@@ -75,16 +75,55 @@ model:
       pre_dispatch: 1
   text:
     pretrained: "distilbert-base-uncased"
-    output_dim: 128
-    max_length: 256
-    freeze_base: false
-    regression_target_col: nba_role_zscore
-    tier_proba_csv_path: null  # e.g. outputs/text_tier_proba_test.csv — multimodal meta-features
+    output_dim: 64
+    hidden_dim: 32
+    dropout: 0.2
+    huber_beta: 1.0
+    max_length: 128
+    freeze_base: true
+    task: regression # task: regression | classification — CE on prospect_tier often tracks tabular clf better for stacking (softmax tier probs).
+    classification_target_col: prospect_tier
+    num_classes: 4
+    regression_target_col: nba_role_zscore # Regression targets: nba_role_zscore (Gaussian tier export), VORP, DPM — VORP/DPM require columns on nba master.
+    tier_proba_csv_path: null  # e.g. outputs/text_tier_proba_full.csv — all (Name, draft_year) with text; use with multimodal
 
-  # Probability stacking (stats-only). Lower cv_folds / lighter oof_params if the OS kills the process.
+  # Shallow scouting-text ridge model (NLTK VADER + lexicons, optional TF–IDF) for multimodal text towers.
+  text_shallow:
+    ridge_alpha: 1.0
+    sentiment:
+      enabled: true
+      use_pos_neg_neu: true
+    # lexicons: {}  # optional: success_words, red_flag_words, red_flag_phrases lists
+    tfidf:
+      enabled: false
+      max_features: 1000
+      min_df: 2
+      ngram_range: [1, 2]
+
+  # Probability stacking: tabular clf/reg + scouting text, each with OOF meta features then a final refit.
   multimodal:
     cv_folds: 3
     output_dir: outputs/multimodal
+    text_tier_proba_csv: null  # same path as model.text.tier_proba_csv_path after a text run; null = stats-only stacker
+    text_meta_key: scouting   # fallback only when base_models.text is omitted
+    base_models:
+      classification: [logistic_l2, xgboost]
+      regression: [ridge, xgboost]
+      text: [scouting, scouting_lexicon]
+    text_backends:
+      scouting: transformer
+      scouting_lexicon: shallow_lexicon
+    # Text stacks use the same pattern as stats models: list keys under base_models.text, then map each key
+    # to transformer (deep) or shallow_lexicon via text_backends (default: transformer).
+    # text_shallow_overrides:  # optional per-key dict merged onto model.text_shallow
+    #   scouting_lexicon:
+    #     ridge_alpha: 1.0
+    # Legacy alternative when base_models.text is not set:
+    # text_towers:
+    #   - meta_key: scouting
+    #     type: transformer
+    #   - meta_key: scouting_lexicon
+    #     type: shallow_lexicon
     calibration:
       method: sigmoid
       calibration_size: 0.15
@@ -107,8 +146,8 @@ training:
   batch_size: 48
   lr: 1e-3
   weight_decay: 1e-4
-  epochs: 10
-  early_stopping_patience: 3
+  epochs: 50
+  early_stopping_patience: 10
   grad_clip: 1.0
   seed: 42
 

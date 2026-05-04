@@ -627,7 +627,7 @@ def run(df=None, cfg=None, run_name=None, tracking_uri=None):
                 "max_iter":        5000,
                 "n_meta_features": len(model.meta_cols),
             })
-            mlflow.sklearn.log_model(model.stacker, artifact_path="stacker")
+            mlflow.sklearn.log_model(model.stacker, name="stacker")
 
         # Evaluate on test set
         test_proba = model.predict_proba(test_df)

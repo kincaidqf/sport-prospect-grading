@@ -12,7 +12,7 @@ def test_config_top_level_keys(cfg):
 
 
 def test_model_type_is_valid(cfg):
-    valid_types = {"regression", "classification", "text"}
+    valid_types = {"regression", "classification", "text", "text_shallow", "multimodal"}
     assert cfg["model"]["type"] in valid_types
 
 

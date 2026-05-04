@@ -344,7 +344,7 @@ def plot_ordinal_confusion_matrix(confusion_df, artifact_dir):
     row_pct = np.divide(data, row_sums, out=np.zeros_like(data), where=row_sums != 0)
 
     fig, ax = plt.subplots(figsize=(7, 6))
-    im = ax.imshow(data, cmap="Blues")
+    im = ax.imshow(row_pct, cmap="Blues", vmin=0.0, vmax=1.0)
     ax.set_xticks(range(len(tier_display)))
     ax.set_xticklabels(tier_display, fontsize=11)
     ax.set_yticks(range(len(tier_display)))
@@ -352,10 +352,9 @@ def plot_ordinal_confusion_matrix(confusion_df, artifact_dir):
     ax.set_xlabel("Predicted tier", fontsize=12)
     ax.set_ylabel("Actual tier", fontsize=12)
 
-    max_val = data.max() if data.size else 0.0
     for i in range(data.shape[0]):
         for j in range(data.shape[1]):
-            color = "white" if max_val and data[i, j] > max_val * 0.55 else "black"
+            color = "white" if row_pct[i, j] > 0.55 else "black"
             ax.text(
                 j, i,
                 f"{int(data[i, j])}\n({row_pct[i, j]:.0%} of row)",
@@ -368,7 +367,7 @@ def plot_ordinal_confusion_matrix(confusion_df, artifact_dir):
         "Cell: count and % of that actual tier predicted as each column tier",
         fontsize=11, fontweight="bold",
     )
-    fig.colorbar(im, ax=ax, label="Count", shrink=0.8)
+    fig.colorbar(im, ax=ax, label="Row fraction (% of actual tier)", shrink=0.8)
     plt.tight_layout()
     out_path = _explicit_artifact_path("ordinal_confusion_matrix.png", artifact_dir)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -588,6 +587,62 @@ def plot_worst_misses_probability_bars(worst_df, artifact_dir, max_rows=20):
     ax.legend(ncols=4, loc="lower center", bbox_to_anchor=(0.5, -0.18))
     plt.tight_layout()
     out_path = _explicit_artifact_path("worst_misses_probability_bars.png", artifact_dir)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    print(f"Plot saved to {out_path}")
+    plt.close(fig)
+
+
+def plot_best_hits_probability_bars(best_hits: dict, artifact_dir, max_rows=15):
+    """Stacked tier probabilities for lottery-bust and late-star correct calls.
+
+    Do not use ``df or default`` with pandas DataFrames (ambiguous truth value).
+    """
+    fig, axes = plt.subplots(
+        1, 2,
+        figsize=(14, max(5.0, 0.45 * max_rows + 2.0)),
+        constrained_layout=True,
+    )
+    panels = [
+        ("lottery_bust_hits", "Lottery bust hits (pick ≤ 14)\ntrue bust · pred bust"),
+        ("late_star_hits", "Late-pick star hits (pick ≥ 31)\ntrue star · pred star"),
+    ]
+    prob_cols = ["p_bust", "p_bench", "p_starter", "p_star"]
+    colors = ["#5b6770", "#4c78a8", "#59a14f", "#e15759"]
+
+    for ax, (key, title) in zip(axes, panels):
+        raw = best_hits.get(key)
+        if not isinstance(raw, pd.DataFrame) or raw.empty:
+            ax.text(
+                0.5, 0.5, "No matching rows",
+                ha="center", va="center", fontsize=11, transform=ax.transAxes,
+            )
+            ax.set_axis_off()
+            continue
+
+        plot_df = raw.head(max_rows)
+        labels = []
+        for _, row in plot_df.iterrows():
+            name = str(row.get("Name", "?"))
+            pk = row.get("draft_pick", "")
+            conf = float(row.get("confidence", 0.0))
+            labels.append(f"{name}  (#{pk})\nconf={conf:.2f}")
+
+        y = np.arange(len(plot_df))
+        left = np.zeros(len(plot_df))
+        for col, color in zip(prob_cols, colors):
+            vals = plot_df[col].to_numpy(dtype=float)
+            ax.barh(y, vals, left=left, color=color, label=col.replace("p_", ""))
+            left += vals
+
+        ax.set_yticks(y)
+        ax.set_yticklabels(labels, fontsize=8)
+        ax.invert_yaxis()
+        ax.set_xlim(0, 1)
+        ax.set_xlabel("Predicted probability")
+        ax.set_title(title, fontsize=11, fontweight="bold")
+        ax.legend(ncols=4, fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.12))
+
+    out_path = _explicit_artifact_path("best_hits_probability_bars.png", artifact_dir)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     print(f"Plot saved to {out_path}")
     plt.close(fig)

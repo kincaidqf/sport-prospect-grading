@@ -1,0 +1,2 @@
+Name,draft_year,draft_pick,actual_tier,pred_tier,actual_tier_label,pred_tier_label,confidence,p_bust,p_bench,p_starter,p_star,ordinal_error,within_one,distance_weighted_credit,expected_class,expected_class_error
+Tre Mann,2021,33,2,2,starter,starter,0.2925,0.1746,0.2667,0.2925,0.2662,0,True,1.0,1.6504,0.3496

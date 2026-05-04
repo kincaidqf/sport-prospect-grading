@@ -21,17 +21,52 @@ def get_chronological_split(
     train_end_year: int = 2018,
     val_years: tuple[int, ...] = (2019, 2020),
     test_years: tuple[int, ...] = (2021, 2022, 2023),
+    split_mode: str = "chronological",
+    seed: int = 42,
+    stratify_col: str | None = "prospect_tier",
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Return (train, val, test) split by draft year — no temporal leakage."""
-    train = df[df["draft_year"] <= train_end_year].copy()
-    val = df[df["draft_year"].isin(val_years)].copy()
-    test = df[df["draft_year"].isin(test_years)].copy()
-    if train.empty or test.empty:
+    """Return (train, val, test) split by year or random sampling.
+
+    - ``split_mode='chronological'`` (default): classic year-based split
+    - ``split_mode='random'``: random split sized to year-bucket proportions
+    """
+    mode = str(split_mode).strip().lower()
+    train_by_year = df[df["draft_year"] <= train_end_year]
+    val_by_year = df[df["draft_year"].isin(val_years)]
+    test_by_year = df[df["draft_year"].isin(test_years)]
+    if train_by_year.empty or test_by_year.empty:
         raise ValueError(
-            f"Chronological split produced empty train ({len(train)}) or test ({len(test)}). "
+            f"Reference year split produced empty train ({len(train_by_year)}) or test ({len(test_by_year)}). "
             "Check that draft_year values exist for the requested ranges."
         )
-    return train, val, test
+
+    if mode == "chronological":
+        return train_by_year.copy(), val_by_year.copy(), test_by_year.copy()
+    if mode != "random":
+        raise ValueError(f"Unknown split_mode={split_mode!r}; use 'chronological' or 'random'.")
+
+    total_n = len(df)
+    test_size = len(test_by_year) / total_n
+    remainder_n = len(train_by_year) + len(val_by_year)
+    val_size_within_remainder = len(val_by_year) / remainder_n if remainder_n else 0.0
+
+    has_stratify = bool(stratify_col and stratify_col in df.columns)
+    stratify_all = df[stratify_col] if has_stratify else None
+    train_val, test = train_test_split(
+        df,
+        test_size=test_size,
+        random_state=seed,
+        stratify=stratify_all,
+    )
+
+    stratify_train_val = train_val[stratify_col] if has_stratify else None
+    train, val = train_test_split(
+        train_val,
+        test_size=val_size_within_remainder,
+        random_state=seed,
+        stratify=stratify_train_val,
+    )
+    return train.copy(), val.copy(), test.copy()
 
 
 def get_repeated_stratified_cv(

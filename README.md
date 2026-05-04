@@ -497,9 +497,10 @@ If old runs still show `Running`, they are stale records from a process that cra
 model:
   text:
     pretrained: "distilbert-base-uncased"
-    output_dim: 128
-    max_length: 512
-    freeze_base: false            # set true to freeze transformer weights
+    output_dim: 64
+    hidden_dim: 32
+    max_length: 128
+    freeze_base: true             # typical default for small scouting corpora
 training:
   batch_size: 32
   lr: 1e-3

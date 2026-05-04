@@ -1,8 +1,8 @@
 """Multimodal orchestrator for the Probability Stacking Model (PSM Phase 1).
 
-Trains classification and regression base models via out-of-fold cross-validation,
-stacks their tier probabilities with a logistic meta-model, and exposes a unified
-predict_proba interface for downstream use.
+Trains classification, regression, and scouting-text base models via out-of-fold
+cross-validation, stacks their tier probabilities with a logistic meta-model, and
+exposes predict_proba.
 """
 from __future__ import annotations
 
@@ -33,11 +33,14 @@ from src.models.classification_model import (
     train_selected_classification_models,
 )
 from src.models.probability import PROBA_COLUMNS, TIER_CLASS_NAMES, BaseModelBundle
+from src.models.simple_text_model import fit_shallow_text_tier_bundle_for_multimodal
+from src.models.text_model import attach_scouting_text_columns, fit_text_tier_bundle_for_multimodal
 from src.models.regression_model import (
     REGRESSION_MODEL_REGISTRY,
     train_selected_regression_models,
 )
 from src.models.multimodal_reporting import write_multimodal_report
+from src.models.multimodal_text_towers import resolve_text_stack
 from src.training.evaluate import ordinal_classification_metrics
 from src.utils.mlflow_utils import (
     build_mlflow_context,
@@ -67,7 +70,11 @@ def _configure_thread_limits() -> None:
         os.environ.setdefault(key, "1")
 
 
-def _build_meta_cols(clf_models: list[str], reg_models: list[str]) -> list[str]:
+def _build_meta_cols(
+    clf_models: list[str],
+    reg_models: list[str],
+    text_models: list[str],
+) -> list[str]:
     cols = []
     for key in clf_models:
         for c in PROBA_COLUMNS:
@@ -75,12 +82,15 @@ def _build_meta_cols(clf_models: list[str], reg_models: list[str]) -> list[str]:
     for key in reg_models:
         for c in PROBA_COLUMNS:
             cols.append(f"regression__{key}__{c}")
+    for key in text_models:
+        for c in PROBA_COLUMNS:
+            cols.append(f"text__{key}__{c}")
     return cols
 
 
 def _append_bundle_proba(
     meta_df: pd.DataFrame,
-    bundles: dict[str, BaseModelBundle],
+    bundles: dict[str, object],
     task: str,
     models: list[str],
     df: pd.DataFrame,
@@ -99,6 +109,64 @@ def _make_task_cfg(cfg: dict, task: str, mm_cfg: dict) -> dict:
     section["use_engineered_features"] = bool(ue.get(task, False))
     section["use_pos_categorical"] = bool(up.get(task, False))
     return out
+
+
+def _split_train_calibration(df: pd.DataFrame, cal_size: float) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Split fold train/cal with stratification when possible, with a safe fallback."""
+    try:
+        return train_test_split(
+            df,
+            test_size=cal_size,
+            stratify=df[CLF_TARGET_COL],
+            random_state=RANDOM_STATE,
+        )
+    except ValueError:
+        print("[multimodal] calibration split fallback: non-stratified")
+        return train_test_split(
+            df,
+            test_size=cal_size,
+            random_state=RANDOM_STATE,
+        )
+
+
+def train_selected_text_models(
+    train_df: pd.DataFrame,
+    cfg: dict,
+    tower_specs: list[dict],
+    *,
+    epochs: int,
+    silent: bool,
+) -> dict[str, object]:
+    """Train each selected text base model (transformer and/or shallow), mirroring
+    :func:`train_selected_classification_models` / :func:`train_selected_regression_models`.
+
+    Each entry in ``tower_specs`` is ``{meta_key, type, shallow}`` from
+    :func:`resolve_text_stack`.
+    """
+    bundles: dict[str, object] = {}
+    for tower in tower_specs:
+        meta_key = tower["meta_key"]
+        typ = str(tower["type"]).strip().lower()
+        if typ in ("shallow_lexicon", "shallow"):
+            bundles[meta_key] = fit_shallow_text_tier_bundle_for_multimodal(
+                train_df,
+                cfg,
+                shallow_cfg=tower.get("shallow") or {},
+                silent=silent,
+            )
+        elif typ == "transformer":
+            bundles[meta_key] = fit_text_tier_bundle_for_multimodal(
+                train_df,
+                cfg,
+                epochs=epochs,
+                silent=silent,
+            )
+        else:
+            raise ValueError(
+                f"Unknown text model type {typ!r} for meta_key={meta_key!r}; "
+                "use transformer, shallow_lexicon, or shallow.",
+            )
+    return bundles
 
 
 class MultimodalProspectModel:
@@ -121,32 +189,46 @@ class MultimodalProspectModel:
         xgb_cfg = mm_cfg.get("xgboost", {}) or {}
         self.pretune_oof = bool(xgb_cfg.get("pretune_oof_params", False))
 
-        self.meta_cols: list[str] = _build_meta_cols(self.clf_models, self.reg_models)
+        self.text_models, self._text_towers = resolve_text_stack(mm_cfg)
+        declared_meta = str(mm_cfg.get("text_meta_key") or "").strip()
+        self.text_meta_key: str = (
+            declared_meta if declared_meta else (self.text_models[0] if self.text_models else "scouting")
+        )
+        self._composite_cfg = (cfg.get("model") or {}).get("composite_score")
+        train_cfg = cfg.get("training") or {}
+        oof_ep = mm_cfg.get("text_oof_epochs")
+        self.text_oof_epochs: int = int(oof_ep) if oof_ep is not None else int(train_cfg.get("epochs", 3))
+
+        self.meta_cols: list[str] = _build_meta_cols(
+            self.clf_models,
+            self.reg_models,
+            self.text_models,
+        )
 
         # Set by fit()
         self.final_clf_bundles: dict[str, BaseModelBundle] = {}
         self.final_reg_bundles: dict[str, BaseModelBundle] = {}
+        self.final_text_bundles: dict[str, object] = {}
         self.stacker: LogisticRegression | None = None
 
     def fit(self, train_df: pd.DataFrame, mlflow_ctx=None) -> None:
         clf_cfg = _make_task_cfg(self.cfg, "classification", self._mm_cfg)
         reg_cfg = _make_task_cfg(self.cfg, "regression", self._mm_cfg)
 
+        train_work = attach_scouting_text_columns(train_df, self._composite_cfg)
+
         if self.pretune_oof:
-            self._pretune_xgb(train_df)
+            self._pretune_xgb(train_work)
 
-        meta_train = pd.DataFrame(0.0, index=train_df.index, columns=self.meta_cols)
+        meta_train = pd.DataFrame(0.0, index=train_work.index, columns=self.meta_cols)
         skf = StratifiedKFold(n_splits=self.cv_folds, shuffle=True, random_state=RANDOM_STATE)
-        y_all = train_df[CLF_TARGET_COL]
+        y_all = train_work[CLF_TARGET_COL]
 
-        for fold_idx, (train_idx, val_idx) in enumerate(skf.split(train_df, y_all)):
-            fold_full = train_df.iloc[train_idx].copy()
-            fold_val  = train_df.iloc[val_idx].copy()
+        for fold_idx, (train_idx, val_idx) in enumerate(skf.split(train_work, y_all)):
+            fold_full = train_work.iloc[train_idx].copy()
+            fold_val  = train_work.iloc[val_idx].copy()
 
-            fold_core, cal_df = train_test_split(
-                fold_full, test_size=self.cal_size,
-                stratify=fold_full[CLF_TARGET_COL], random_state=RANDOM_STATE,
-            )
+            fold_core, cal_df = _split_train_calibration(fold_full, self.cal_size)
 
             clf_bundles = train_selected_classification_models(
                 fold_core, CLF_TARGET_COL, clf_cfg,
@@ -165,13 +247,20 @@ class MultimodalProspectModel:
             _append_bundle_proba(meta_train, clf_bundles, "classification", self.clf_models, fold_val)
             _append_bundle_proba(meta_train, reg_bundles, "regression",     self.reg_models, fold_val)
 
+            text_bundles = train_selected_text_models(
+                fold_core,
+                self.cfg,
+                self._text_towers,
+                epochs=self.text_oof_epochs,
+                silent=True,
+            )
+            _append_bundle_proba(meta_train, text_bundles, "text", self.text_models, fold_val)
+            print(f"[multimodal] OOF fold {fold_idx + 1}/{self.cv_folds}: tabular + text tower fitted")
+
         self.stacker = LogisticRegression(class_weight="balanced", max_iter=5000)
         self.stacker.fit(meta_train.values, y_all)
 
-        final_core, final_cal = train_test_split(
-            train_df, test_size=self.cal_size,
-            stratify=train_df[CLF_TARGET_COL], random_state=RANDOM_STATE,
-        )
+        final_core, final_cal = _split_train_calibration(train_work, self.cal_size)
 
         self.final_clf_bundles = train_selected_classification_models(
             final_core, CLF_TARGET_COL, clf_cfg,
@@ -186,15 +275,27 @@ class MultimodalProspectModel:
             use_fixed_xgb_params=True,
             mlflow_ctx=mlflow_ctx,
         )
+        train_ep = int((self.cfg.get("training") or {}).get("epochs", 3))
+        self.final_text_bundles = train_selected_text_models(
+            final_core,
+            self.cfg,
+            self._text_towers,
+            epochs=train_ep,
+            silent=False,
+        )
 
     def meta_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        df_in = attach_scouting_text_columns(df, self._composite_cfg)
         parts: list[pd.DataFrame] = []
         for key in self.clf_models:
-            proba = self.final_clf_bundles[key].predict_tier_proba(df)
+            proba = self.final_clf_bundles[key].predict_tier_proba(df_in)
             parts.append(proba.rename(columns={c: f"classification__{key}__{c}" for c in PROBA_COLUMNS}))
         for key in self.reg_models:
-            proba = self.final_reg_bundles[key].predict_tier_proba(df)
+            proba = self.final_reg_bundles[key].predict_tier_proba(df_in)
             parts.append(proba.rename(columns={c: f"regression__{key}__{c}" for c in PROBA_COLUMNS}))
+        for key in self.text_models:
+            proba = self.final_text_bundles[key].predict_tier_proba(df_in)
+            parts.append(proba.rename(columns={c: f"text__{key}__{c}" for c in PROBA_COLUMNS}))
         return pd.concat(parts, axis=1)[self.meta_cols]
 
     def predict_proba(self, df: pd.DataFrame) -> np.ndarray:
@@ -272,7 +373,6 @@ class MultimodalProspectModel:
 def run(df=None, cfg=None, run_name=None, tracking_uri=None):
     _configure_thread_limits()
     model_cfg     = (cfg.get("model", {}) or {})
-    mm_cfg        = model_cfg.get("multimodal", {}) or {}
     composite_cfg = model_cfg.get("composite_score") or {}
 
     df = load_data(composite_cfg=composite_cfg) if df is None else df
@@ -296,13 +396,18 @@ def run(df=None, cfg=None, run_name=None, tracking_uri=None):
         if cfg is not None:
             log_config_dict(cfg)
         log_common_params({
-            "model_family": "multimodal",
-            "target":       "prospect_tier",
-            "clf_models":   str(model.clf_models),
-            "reg_models":   str(model.reg_models),
-            "cal_size":     model.cal_size,
-            "pretune_oof":  model.pretune_oof,
-            "meta_cols":    str(model.meta_cols),
+            "model_family":    "multimodal",
+            "target":          "prospect_tier",
+            "clf_models":      str(model.clf_models),
+            "reg_models":      str(model.reg_models),
+            "text_models":     str(model.text_models),
+            "text_towers":     str(model._text_towers),
+            "text_backends":   str(model._mm_cfg.get("text_backends") or {}),
+            "text_oof_epochs": model.text_oof_epochs,
+            "cal_size":        model.cal_size,
+            "pretune_oof":     model.pretune_oof,
+            "meta_cols":       str(model.meta_cols),
+            "text_meta_key":   str(model.text_meta_key),
         })
         log_data_summary(
             df, target_col=CLF_TARGET_COL, task="classification",
@@ -325,9 +430,10 @@ def run(df=None, cfg=None, run_name=None, tracking_uri=None):
                 "max_iter":        5000,
                 "n_meta_features": len(model.meta_cols),
             })
-            mlflow.sklearn.log_model(model.stacker, artifact_path="stacker")
+            mlflow.sklearn.log_model(model.stacker, name="stacker")
 
-        test_proba = model.predict_proba(test_df)
+        test_df_scout = attach_scouting_text_columns(test_df, composite_cfg)
+        test_proba = model.predict_proba(test_df_scout)
         y_test = test_df[CLF_TARGET_COL]
         y_pred = np.argmax(test_proba, axis=1)
 

@@ -8,8 +8,10 @@ import pandas as pd
 from sklearn.metrics import confusion_matrix
 
 from src.models.probability import PROBA_COLUMNS, TIER_CLASS_NAMES
+from src.models.text_model import attach_scouting_text_columns
 from src.training.evaluate import ordinal_classification_metrics
 from src.utils.plotting import (
+    plot_best_hits_probability_bars,
     plot_expected_vs_true,
     plot_multimodal_model_summary,
     plot_ordinal_confusion_matrix,
@@ -57,7 +59,7 @@ def build_enriched_predictions(
     y_pred_arr = np.asarray(y_pred, dtype=int)
     proba_arr = np.asarray(test_proba, dtype=float)
 
-    id_cols = [c for c in ["Name", "draft_year"] if c in test_df.columns]
+    id_cols = [c for c in ("Name", "draft_year", "draft_pick") if c in test_df.columns]
     pred_df = test_df[id_cols].copy() if id_cols else pd.DataFrame(index=test_df.index)
     pred_df["actual_tier"] = y_true_arr
     pred_df["pred_tier"] = y_pred_arr
@@ -93,17 +95,30 @@ def build_model_summary(model, test_df: pd.DataFrame, y_test, y_pred, test_proba
     rows = [_summary_row("multimodal__stacker", "multimodal", y_test, y_pred, test_proba)]
     base_rows = []
 
+    comp = ((getattr(model, "cfg", None) or {}).get("model") or {}).get("composite_score")
+    test_in = (
+        attach_scouting_text_columns(test_df, comp)
+        if getattr(model, "final_text_bundles", None)
+        else test_df
+    )
+
     for key in model.clf_models:
         bundle = model.final_clf_bundles[key]
-        proba = bundle.predict_tier_proba(test_df)
+        proba = bundle.predict_tier_proba(test_in)
         y_hat = np.argmax(proba.values, axis=1)
         base_rows.append(_summary_row(f"classification__{key}", "classification", y_test, y_hat, proba.values))
 
     for key in model.reg_models:
         bundle = model.final_reg_bundles[key]
-        proba = bundle.predict_tier_proba(test_df)
+        proba = bundle.predict_tier_proba(test_in)
         y_hat = np.argmax(proba.values, axis=1)
         base_rows.append(_summary_row(f"regression__{key}", "regression", y_test, y_hat, proba.values))
+
+    for key in getattr(model, "text_models", []):
+        bundle = model.final_text_bundles[key]
+        proba = bundle.predict_tier_proba(test_in)
+        y_hat = np.argmax(proba.values, axis=1)
+        base_rows.append(_summary_row(f"text__{key}", "text", y_test, y_hat, proba.values))
 
     return pd.DataFrame(rows + base_rows), pd.DataFrame(base_rows)
 
@@ -123,6 +138,46 @@ def build_confusion_table(y_test, y_pred) -> pd.DataFrame:
     return pd.DataFrame(matrix, index=TIER_CLASS_NAMES, columns=TIER_CLASS_NAMES)
 
 
+def build_best_hits_tables(pred_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """Lottery bust hits (early pick, true & pred bust) and late steal stars (late pick, true & pred star)."""
+    empty = {"lottery_bust_hits": pd.DataFrame(), "late_star_hits": pd.DataFrame()}
+    if "draft_pick" not in pred_df.columns:
+        return empty
+    
+    LOTTERY_MAX_PICK = 14
+    LATE_STAR_MIN_PICK = 31
+
+    dp = pd.to_numeric(pred_df["draft_pick"], errors="coerce")
+    has_pick = dp.notna()
+    if not has_pick.any():
+        return empty
+
+    tier_bust, tier_bench, tier_starter, tier_star = 0, 1, 2, 3
+    lottery_bust = pred_df.loc[
+        has_pick
+        & (dp <= LOTTERY_MAX_PICK)
+        & ((pred_df["actual_tier"] == tier_bust) | (pred_df["actual_tier"] == tier_bench))
+        & ((pred_df["pred_tier"] == tier_bust) | (pred_df["pred_tier"] == tier_bench))
+    ].copy()
+    lottery_bust["_rk"] = pd.to_numeric(lottery_bust["draft_pick"], errors="coerce")
+    lottery_bust = lottery_bust.sort_values(
+        ["_rk", "confidence"], ascending=[True, False]
+    ).drop(columns=["_rk"], errors="ignore")
+
+    late_star = pred_df.loc[
+        has_pick
+        & (dp >= LATE_STAR_MIN_PICK)
+        & ((pred_df["actual_tier"] == tier_starter) | (pred_df["actual_tier"] == tier_star))
+        & ((pred_df["pred_tier"] == tier_starter) | (pred_df["pred_tier"] == tier_star))
+    ].copy()
+    late_star["_rk"] = pd.to_numeric(late_star["draft_pick"], errors="coerce")
+    late_star = late_star.sort_values(
+        ["confidence", "_rk"], ascending=[False, False]
+    ).drop(columns=["_rk"], errors="ignore")
+
+    return {"lottery_bust_hits": lottery_bust, "late_star_hits": late_star}
+
+
 def build_probability_mass_by_true_class(pred_df: pd.DataFrame) -> pd.DataFrame:
     prob_mass = pred_df.groupby("actual_tier_label")[PROBA_COLUMNS].mean()
     return prob_mass.reindex(TIER_CLASS_NAMES).fillna(0.0)
@@ -135,6 +190,7 @@ def build_stacker_contributions(model) -> pd.DataFrame:
 
     base_models = [f"classification__{key}" for key in model.clf_models]
     base_models += [f"regression__{key}" for key in model.reg_models]
+    base_models += [f"text__{key}" for key in getattr(model, "text_models", [])]
     out = pd.DataFrame(0.0, index=base_models, columns=TIER_CLASS_NAMES)
 
     for class_pos, cls in enumerate(classes):
@@ -178,11 +234,22 @@ def write_multimodal_report(
     )
     stacker_contributions = build_stacker_contributions(model)
 
+    best_hits = build_best_hits_tables(pred_df)
+
     _round_floats(pred_df).to_csv(os.path.join(out_dir, "test_predictions.csv"), index=False)
     model.meta_features(test_df).round(4).to_csv(os.path.join(out_dir, "test_meta_features.csv"), index=True)
     _round_floats(base_model_summary).to_csv(os.path.join(out_dir, "base_model_summary.csv"), index=False)
     _round_floats(model_summary).to_csv(os.path.join(out_dir, "model_summary.csv"), index=False)
     _round_floats(worst_misses).to_csv(os.path.join(out_dir, "worst_misses.csv"), index=False)
+    for bh_name, bh_df in best_hits.items():
+        path = os.path.join(out_dir, f"{bh_name}.csv")
+        if bh_df.empty:
+            pd.DataFrame(
+                [{"note": "No rows matched (need draft_pick; adjust model.multimodal.best_hits thresholds)."}],
+            ).to_csv(path, index=False)
+        else:
+            _round_floats(bh_df).to_csv(path, index=False)
+        print(f"[multimodal] best hits: {bh_name} → {len(bh_df)} rows → {path}")
     error_distribution.to_csv(os.path.join(out_dir, "ordinal_error_distribution.csv"), index=False)
     confusion_df.to_csv(os.path.join(out_dir, "confusion_matrix.csv"), index=True)
     _round_floats(probability_mass, decimals=4).to_csv(
@@ -204,6 +271,7 @@ def write_multimodal_report(
     plot_expected_vs_true(pred_df, artifact_dir=out_dir)
     plot_probability_mass_by_true_class(probability_mass, artifact_dir=out_dir)
     plot_worst_misses_probability_bars(worst_misses, artifact_dir=out_dir, max_rows=20)
+    plot_best_hits_probability_bars(best_hits, artifact_dir=out_dir, max_rows=15)
     plot_stacker_contribution_heatmap(stacker_contributions, artifact_dir=out_dir)
 
     return {
@@ -214,5 +282,6 @@ def write_multimodal_report(
         "confusion_matrix": confusion_df,
         "probability_mass_by_true_class": probability_mass,
         "worst_misses": worst_misses,
+        "best_hits": best_hits,
         "stacker_contributions": stacker_contributions,
     }
