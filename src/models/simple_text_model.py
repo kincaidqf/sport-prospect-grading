@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+import matplotlib.pyplot as plt
 import mlflow
 import numpy as np
 import pandas as pd
@@ -350,6 +351,35 @@ def fit_shallow_text_tier_bundle_for_multimodal(
     )
 
 
+def _plot_shallow_text_results(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    plot_dir: str,
+    regression_target_col: str,
+) -> None:
+    plot_path = Path(plot_dir)
+    plot_path.mkdir(parents=True, exist_ok=True)
+
+    plt.figure(figsize=(6, 5))
+    plt.scatter(y_true, y_pred, alpha=0.6, s=30, edgecolors="none")
+    upper_lim = max(abs(float(np.max(y_true))), abs(float(np.max(y_pred)))) + 1
+    lower_lim = min(float(np.min(y_true)), float(np.min(y_pred))) - 1
+    plt.plot([lower_lim, upper_lim], [lower_lim, upper_lim], "r--", linewidth=1, label="Perfect prediction")
+    plt.xlabel(f"Actual {regression_target_col}")
+    plt.ylabel(f"Predicted {regression_target_col}")
+    plt.title(f"Shallow text model: scouting report -> {regression_target_col}")
+    plt.legend(fontsize=8)
+    plt.xlim(lower_lim, upper_lim)
+    plt.ylim(lower_lim, upper_lim)
+    plt.tight_layout()
+    out_path = plot_path / "simple_text_model_results.png"
+    plt.savefig(out_path, dpi=150)
+    plt.close()
+    print(f"\nPlot saved to {out_path}")
+    if mlflow.active_run() is not None:
+        mlflow.log_artifact(str(out_path), artifact_path="plots")
+
+
 def train_and_evaluate_shallow_text_model(
     *,
     cfg: dict | None = None,
@@ -462,6 +492,12 @@ def train_and_evaluate_shallow_text_model(
             }
         )
         mlflow.log_metrics(metrics)
+        _plot_shallow_text_results(
+            y_true=test_df[TARGET_Z].to_numpy(dtype=np.float64),
+            y_pred=test_pred,
+            plot_dir="outputs/simple_text_model",
+            regression_target_col=TARGET_Z,
+        )
         if tier_proba_csv_path:
             proba_full = bundle.predict_tier_proba(df[["text"]])
             id_cols = [c for c in ("Name", "draft_year") if c in df.columns]
