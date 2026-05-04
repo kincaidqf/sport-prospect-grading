@@ -1,4 +1,4 @@
-"""Interpretability for TextProspectPredictor: probes, occlusion, log-odds, sentiment, REPORT.md.
+"""Interpretability for TextProspectPredictor: probes, log-odds, sentiment, REPORT.md.
 
 Run from repo root (after training with ``save_path``):
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
-from collections import Counter, defaultdict
+from collections import Counter
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -301,148 +301,6 @@ def _word_tokens(text: str) -> list[str]:
     return re.findall(r"[a-z0-9']+", text.lower())
 
 
-def _mask_words(words: list[str], start: int, end_exclusive: int, mask: str) -> str:
-    """Replace words[start:end_exclusive] with single [MASK] token joined by spaces."""
-    out = words[:start] + [mask] + words[end_exclusive:]
-    return " ".join(out)
-
-
-def run_occlusion(
-    model: TextProspectPredictor,
-    device: torch.device,
-    meta: dict,
-    texts: list[str],
-    out_dir: str,
-    min_reports: int = 10,
-    batch_size: int = 32,
-    max_variants_per_report: int = 80,
-) -> dict[str, pd.DataFrame]:
-    """Aggregate occlusion deltas per n-gram per head."""
-    head_keys, head_labels = _heads_from_meta(meta)
-    tokenizer = model.text_encoder.tokenizer
-    mask_tok = tokenizer.mask_token or "[MASK]"
-    max_length = meta["max_length"]
-
-    # Collect deltas per (head, ngram_key) -> list of deltas
-    deltas_store: dict[tuple[str, str], list[float]] = defaultdict(list)
-
-    for text in texts:
-        words = _word_tokens(text)
-        if len(words) < 2:
-            continue
-        variants: list[str] = []
-        keys: list[str] = []
-
-        seen_uni: set[str] = set()
-        seen_bi: set[str] = set()
-
-        for i in range(len(words)):
-            key = words[i]
-            if key not in seen_uni:
-                seen_uni.add(key)
-                variants.append(_mask_words(words, i, i + 1, mask_tok))
-                keys.append(key)
-
-        for i in range(len(words) - 1):
-            key = f"{words[i]} {words[i + 1]}"
-            if key not in seen_bi:
-                seen_bi.add(key)
-                variants.append(_mask_words(words, i, i + 2, mask_tok))
-                keys.append(key)
-
-        if not variants:
-            continue
-        if len(variants) > max_variants_per_report:
-            step = max(1, len(variants) // max_variants_per_report)
-            selected = list(range(0, len(variants), step))[:max_variants_per_report]
-            variants = [variants[i] for i in selected]
-            keys = [keys[i] for i in selected]
-
-        orig_scores = score_texts(
-            model,
-            [text],
-            device,
-            meta["target_mean"],
-            meta["target_std"],
-            max_length=max_length,
-            batch_size=batch_size,
-            meta=meta,
-        )
-
-        # Batch masked variants
-        for start in range(0, len(variants), batch_size):
-            chunk = variants[start : start + batch_size]
-            chunk_keys = keys[start : start + batch_size]
-            masked_scores = score_texts(
-                model,
-                chunk,
-                device,
-                meta["target_mean"],
-                meta["target_std"],
-                max_length=max_length,
-                batch_size=batch_size,
-                meta=meta,
-            )
-            for j, k in enumerate(chunk_keys):
-                for h in head_keys:
-                    d = float(orig_scores[h][0] - masked_scores[h][j])
-                    deltas_store[(h, k)].append(d)
-
-    rows = []
-    for (h, ngram), ds in deltas_store.items():
-        if len(ds) < min_reports:
-            continue
-        arr = np.asarray(ds, dtype=np.float64)
-        mean_d = float(arr.mean())
-        std_d = float(arr.std(ddof=1)) if len(arr) > 1 else 0.0
-        se = std_d / np.sqrt(len(arr)) if len(arr) > 1 else 1.0
-        t_stat = mean_d / se if se > 0 else 0.0
-        rows.append(
-            {
-                "ngram": ngram,
-                "n_reports": len(ds),
-                "mean_delta": mean_d,
-                "t_stat": t_stat,
-                "head": h,
-            }
-        )
-
-    df_all = pd.DataFrame(rows)
-    if df_all.empty:
-        df_all = pd.DataFrame(columns=["ngram", "n_reports", "mean_delta", "t_stat", "head"])
-    by_head: dict[str, pd.DataFrame] = {}
-    for h in head_keys:
-        sub = df_all[df_all["head"] == h].copy() if not df_all.empty else pd.DataFrame()
-        if sub.empty:
-            sub = pd.DataFrame(columns=["ngram", "n_reports", "mean_delta", "t_stat", "head"])
-        else:
-            sub = sub.sort_values("mean_delta", ascending=False)
-        cols = [c for c in ["ngram", "n_reports", "mean_delta", "t_stat"] if c in sub.columns]
-        sub[cols].to_csv(os.path.join(out_dir, f"occlusion_{h}.csv"), index=False)
-        by_head[h] = sub
-        if not sub.empty:
-            _plot_occlusion_bars(sub, h, out_dir, head_labels)
-    return by_head
-
-
-def _plot_occlusion_bars(df: pd.DataFrame, head: str, out_dir: str, head_labels: dict[str, str]) -> None:
-    top = df.nlargest(20, "mean_delta")
-    bottom = df.nsmallest(20, "mean_delta")
-    plot_df = pd.concat([bottom, top])
-    plot_df = plot_df.sort_values("mean_delta", ascending=True)
-    fig, ax = plt.subplots(figsize=(8, 10))
-    y_pos = np.arange(len(plot_df))
-    ax.barh(y_pos, plot_df["mean_delta"].values, color="steelblue")
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(plot_df["ngram"].tolist(), fontsize=8)
-    ax.axvline(0.0, color="gray", linestyle="--", linewidth=0.8)
-    ax.set_xlabel("Mean Δ prediction (original − masked)")
-    ax.set_title(f"Occlusion — {head_labels[head]}")
-    plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, f"occlusion_{head}.png"), dpi=150)
-    plt.close()
-
-
 def _load_stopwords() -> set[str]:
     from nltk.corpus import stopwords
 
@@ -662,7 +520,6 @@ def _normalize_term(s: str) -> str:
 
 def agreement_terms(
     probes_df: pd.DataFrame,
-    occlusion_df: pd.DataFrame,
     logodds_df: pd.DataFrame,
     head: str,
     top_k: int = 15,
@@ -675,11 +532,6 @@ def agreement_terms(
         p = probes_df[probes_df["head"] == head] if "head" in probes_df.columns else probes_df
         pos_sets.append(set(_normalize_term(x) for x in p.nlargest(top_k, "delta_vs_baseline")["phrase"]))
         neg_sets.append(set(_normalize_term(x) for x in p.nsmallest(top_k, "delta_vs_baseline")["phrase"]))
-
-    if not occlusion_df.empty:
-        o = occlusion_df[occlusion_df["head"] == head] if "head" in occlusion_df.columns else occlusion_df
-        pos_sets.append(set(_normalize_term(x) for x in o.nlargest(top_k, "mean_delta")["ngram"]))
-        neg_sets.append(set(_normalize_term(x) for x in o.nsmallest(top_k, "mean_delta")["ngram"]))
 
     if not logodds_df.empty:
         logodds_sub = logodds_df  # no head column
@@ -701,7 +553,6 @@ def agreement_terms(
 def write_report(
     out_dir: str,
     probe_tables: dict[str, pd.DataFrame],
-    occlusion_tables: dict[str, pd.DataFrame],
     logodds_tables: dict[str, pd.DataFrame],
     sentiment_df: pd.DataFrame,
     head_labels: dict[str, str],
@@ -709,13 +560,13 @@ def write_report(
     lines = [
         "# Text model interpretability",
         "",
-        "Methods: **synthetic phrase probes** (Δ vs neutral baseline), **aggregated occlusion** (original − masked prediction), **corpus log-odds** (top vs bottom predicted quartiles).",
+        "Methods: **synthetic phrase probes** (Δ vs neutral baseline) and **corpus log-odds** (top vs bottom predicted quartiles).",
         "",
         "## Caveats",
         "",
         "- Probes are out-of-distribution; prefer **relative** ordering and Δ vs baseline.",
-        "- Occlusion and log-odds use **word-level** n-grams; subword effects are not shown.",
-        "- Player names and common NBA team tokens are stripped for log-odds; occlusion uses raw reports.",
+        "- Log-odds uses **word-level** n-grams; subword effects are not shown.",
+        "- Player names and common NBA team tokens are stripped for log-odds.",
         "",
     ]
 
@@ -739,22 +590,6 @@ def write_report(
                 lines.append(f"| {row['phrase']} | {row['category']} | {row['delta_vs_baseline']:.4f} |")
             lines.append("")
 
-        o = occlusion_tables.get(h, pd.DataFrame())
-        if not o.empty:
-            lines.append("### Occlusion (mean Δ over reports)")
-            top_o = o.nlargest(15, "mean_delta")
-            bot_o = o.nsmallest(15, "mean_delta")
-            lines.append("| ngram | n_reports | mean Δ |")
-            lines.append("| --- | --- | --- |")
-            for _, row in top_o.iterrows():
-                lines.append(f"| {row['ngram']} | {row['n_reports']} | {row['mean_delta']:.4f} |")
-            lines.append("")
-            lines.append("| ngram | n_reports | mean Δ |")
-            lines.append("| --- | --- | --- |")
-            for _, row in bot_o.iterrows():
-                lines.append(f"| {row['ngram']} | {row['n_reports']} | {row['mean_delta']:.4f} |")
-            lines.append("")
-
         lg = logodds_tables.get(h, pd.DataFrame())
         if not lg.empty:
             lines.append("### Log-odds (predicted top vs bottom quartile)")
@@ -771,8 +606,8 @@ def write_report(
                 lines.append(f"| {row['ngram']} | {row['log_odds']:.4f} |")
             lines.append("")
 
-        pos_agree, neg_agree = agreement_terms(p, o, lg, h)
-        lines.append("### Cross-method agreement (term in ≥2 of probe / occlusion / log-odds top-15 lists)")
+        pos_agree, neg_agree = agreement_terms(p, lg, h)
+        lines.append("### Cross-method agreement (term in both probe and log-odds top-15 lists)")
         lines.append("")
         lines.append("**Positive-associated:** " + (", ".join(pos_agree) if pos_agree else "_none_"))
         lines.append("")
@@ -812,14 +647,8 @@ def build_name_tokens(df: pd.DataFrame) -> set[str]:
     return tokens
 
 
-def pick_occlusion_sample(df: pd.DataFrame, n: int, seed: int) -> list[str]:
-    if len(df) <= n:
-        return df["text"].tolist()
-    return df.sample(n=n, random_state=seed)["text"].tolist()
-
-
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Interpret TextProspectPredictor (probes, occlusion, log-odds).")
+    p = argparse.ArgumentParser(description="Interpret TextProspectPredictor (probes, log-odds, sentiment).")
     p.add_argument(
         "--checkpoint",
         default=None,
@@ -836,13 +665,6 @@ def parse_args() -> argparse.Namespace:
         help="When --retrain, save checkpoint here.",
     )
     p.add_argument("--out-dir", default=DEFAULT_OUT)
-    p.add_argument("--n-occlusion", type=int, default=40)
-    p.add_argument(
-        "--max-variants-per-report",
-        type=int,
-        default=80,
-        help="Cap masked 1/2-gram variants evaluated per report during occlusion.",
-    )
     p.add_argument("--seed", type=int, default=42)
     return p.parse_args()
 
@@ -888,22 +710,12 @@ def main() -> None:
 
     probe_tables = run_probes(model, device, meta, out_dir)
 
-    occ_sample = pick_occlusion_sample(df, args.n_occlusion, args.seed)
-    occlusion_frames = run_occlusion(
-        model,
-        device,
-        meta,
-        occ_sample,
-        out_dir,
-        max_variants_per_report=args.max_variants_per_report,
-    )
-
     logodds_tables = run_log_odds(texts_full, preds_by_head, name_tokens, stop, out_dir, head_labels)
 
     sentiment_df = run_sentiment_correlation(texts_full, preds_by_head, out_dir)
 
     # Occlusion/DataFrames don't have redundant head column in probe_tables
-    write_report(out_dir, probe_tables, occlusion_frames, logodds_tables, sentiment_df, head_labels)
+    write_report(out_dir, probe_tables, logodds_tables, sentiment_df, head_labels)
     print(f"Interpretability artifacts written to {out_dir}")
 
 
