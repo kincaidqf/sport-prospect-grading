@@ -717,22 +717,15 @@ Device is logged to MLflow as a reproducibility parameter on every run.
 # Kincaid AI Usage Disclosure
 
 For this project I relied on Claude code (from terminal) as my LLM of choice. 
-In the terminal it does not keep track of conversation history, so the following
-document has been reconstructed (again using claude!) from my git history. All 
-of the text sections were written by me. 
+In the terminal it does not keep track of conversation history, so I had it go
+back through my git history and help me reconstruct a log with some examples of
+how I used claude. All of the text (not example conversations) was done by me.
 
----
+1. Project Scaffolding & Initial Architecture
 
-## 1. Project Scaffolding & Initial Architecture
-
-**Commits**: `fe403e8`, `0d29933`, `3711642`
-
-The initial repository structure — `pyproject.toml`, `src/config/config.yaml`,
-`src/models/`, `src/training/`, `src/utils/`, `docker/`, `Makefile`, `.env.example`,
-`notebooks/01_eda.ipynb`, and skeleton model files — were templated out by claude
-from a description of the intended architecture. This included the initial
-`regression_model.py`, `text_model.py`, and `multimodal_model.py` stubs, as well
-as the Docke configuration which was later removed.
+The initial repository structure was templated out by claude from a description
+of the desired architecture, which included initial model stubs as well and
+Docker setup. 
 
 **Example conversation:**
 
@@ -746,23 +739,19 @@ as the Docke configuration which was later removed.
 > GPU/CUDA image. Scaffold skeleton files with the right imports and empty
 > functions
 
----
-
-## 2. Data Pipeline: NBA & NCAA Collection and Recovery
+2. Data Pipeline: NBA & NCAA Collection and Recovery
 
 **Commits**: `8f378d7`, `50c7a42`, `662123a`, `489145a`, `29b78c5`
 
-Claude wrote the data-gathering scripts: `fetch_nba_stats.py` (pulling first 3 NBA
-seasons per player from the NBA API), `recover_nba_players.py` (fuzzy-name audit
-for players missing from the initial pull), and `backfill_profile.py` (filling in
-missing `Cl`/`Pos`/`Ht` columns in `ncaa_master.csv` for 2021–2023 seasons). I
-directed each of these, particularly what sources to use, as claude had a less 
-than ethical data scraping process, and what the reconciliation logic should be.
+Claude wrote the data-gathering scripts pulling first 3 NBA seasons per player 
+from the NBA API, the fuzzy-name audit to recover players, backfilling missing
+columns, etc. I directed each of these scripts, particularly the sources to use,
+as claude had a less than ethical data scraping process. 
 
 The switch from arbitrary percentile tiers of nba stats (primarily +/-) to the
-z-score threshold approach was also implemented by claude after I determined
-that the percentile approach was distorting nba reality, and the decision as 
-a group to move toward a 4 bucket approach.
+z-score threshold approach was one of the most essential changes and I think
+improvements in the accuracy/validity of our project. I directed it but again
+the actual functions were implemented by claude.
 
 **Example conversation:**
 
@@ -773,18 +762,14 @@ a group to move toward a 4 bucket approach.
 > using the matched ID. Log every player that couldn't be recovered so I can
 > audit them manually.
 
----
-
-## 3. Repository Restructuring
-
-**Commits**: `ce5124e`, `97cbdc4`
+3. Repository Restructuring
 
 After it became clear that everything was going to be trainable locally on our
 computers we decided to switch to uv from Docker, and I had claude restructure 
 the project to remove the Docker/Makefile scaffolding, break out a 
-`classification_model.py` from `regression_model.py`, create `src/data/loader.py` 
-as a shared data-loading file, and create `src/utils/features.py` and 
-`src/utils/plotting.py` for shared utilities across both model types.
+classification_model.py from regression_model.py, create src/data/loader.py`
+as a shared data-loading file, and create src/utils/features.py and 
+src/utils/plotting.py for shared utilities across both model types.
 
 **Example conversation:**
 
@@ -796,12 +781,7 @@ as a shared data-loading file, and create `src/utils/features.py` and
 > `src/utils/`. The models should each call the shared utilities rather than
 > duplicating logic.
 
-
----
-
-## 4. MLflow Logging Infrastructure
-
-**Commits**: `3b767de`, `bfd33ec`, `c79bc0f`, `3bfb6d1`, `9e3e94e`
+4. MLflow Logging Infrastructure
 
 MLflow integration was written by claude. This included `mlflow_utils.py`
 (experiment resolution, run auto-naming with MLflow logging calls
@@ -824,19 +804,13 @@ metrics in the model code.
 > leave all PNG files local. The tracking URI should have a priority chain:
 > CLI arg > env var > config > default mlruns/.
 
+5. Classification Model Iteration
 
----
-
-## 5. Classification Model Iteration
-
-**Commits**: `b8ff92b`, `10c1e77`, `b362800`, `04fc796`, `fdba065`, `d6cd38d`,
-`81276be`, `3588801`, `d087a1d`, `14ceef0`, `4fc26e2`, `3bdf41f`
-
-I made nine major architectural changes to the classification model, my primary focus 
-throughout the project. Each was guided by my own schema on basketball and nba 
-performance, but with implemented by claude. This included changing target metrics,
-adjusting input features, designing my own composite features, etc.
-
+I made a few major architectural changes to the classification model, which was my 
+primary focus  throughout the project. Each was guided by my own schema on basketball 
+and nba  performance, but with implemention by claude. This included changing target 
+metrics, adjusting input features, designing my own composite features, etc. Below
+is a list of how those changes manifested across the classification training runs.
 
 - **v1–v4**: Switching from single-column NBA targets to a composite z-score
   metric (weighted combination of minutes, games played, and plus/minus), then
@@ -863,11 +837,7 @@ adjusting input features, designing my own composite features, etc.
 > a `chronological_split()` function based on draft year, and update the
 > classification model to use it.
 
----
-
-## 6. Feature Engineering & Diagnostic Documentation
-
-**Commits**: `d087a1d`, `3588801`, `81276be`, `29b78c5`, `3bdf41f`
+6. Feature Engineering & Diagnostic Documentation
 
 I used claude to generate a DIAGNOSTIC_REPORT.md and IMPLEMENTATION_CHANGE. The
 DIAGNOSTIC_REPORT was created to summarize the progress of the project toward 
@@ -891,14 +861,10 @@ committed seperately, with claude working through those plans.
 > with the exact weighting; (3) what's explicitly excluded and why. Keep it as
 > a living document — I'll update it as we iterate.
 
----
+7. Probability Stacking Model Architecture
 
-## 7. Probability Stacking Model Architecture
-
-**Commits**: `81276be`, `fdba065`, `0099927`
-
-I designed the probability stacking architecture (base models → shared 4-class
-probability interface → meta-model) and had claude generate `PROBABILITY_STACKING_MODEL.md`
+I designed the probability stacking architecture (base models > shared 4-class
+probability interface > meta-model) and had claude generate `PROBABILITY_STACKING_MODEL.md`
 documenting the plan, then implement it. This involved:
 
 - Writing `src/models/probability.py` with a shared `BaseModelBundle` dataclass,
@@ -924,29 +890,13 @@ documenting the plan, then implement it. This involved:
 > class order is always `["bust", "bench", "starter", "star"]`. Then refactor
 > both models to return `BaseModelBundle` instances.
 
----
+8. Multimodal Model Implementation
 
-## 8. Multimodal Model Implementation
-
-**Commits**: `adfbd54`, `0099927`, `237b227`, `4fe6c49`, `52c54c3`, `5998866`
-
-The multimodal model was planned in `PSM_PHASE1.md` (a claude-generated
+The multimodal model was planned in PSM_PHASE1.md (a claude-generated
 implementation plan based on the stacking model document) and broke it into six 
 chunks to ensure that I wasn't goingg to run out of tokens and could monitor
 each part of the implementation independently. Claude implemented each chunk 
 after I reviewed and approved the plan.
-
-- **Chunk 1–4** (`0099927`): 4-class tier migration across loader, inference,
-  and contract-check script; `probability.py` module; classification and regression
-  model refactors.
-- **Chunk 5** (`237b227`): `multimodal.py` — the stacking orchestrator that
-  loads the best base model bundles, generates OOF probability meta-features,
-  trains a logistic regression meta-model, and produces final tier predictions.
-- **Chunk 6** (`4fe6c49`): Wiring `main.py` to call the multimodal runner with
-  the best-performing regression and classification models from config.
-- **Reporting** (`52c54c3`): `multimodal_reporting.py` and `src/utils/plotting.py`
-  extensions for confusion matrices, ordinal error distributions, stacker
-  contribution heatmaps, and worst-miss analysis.
 
 **Example conversation:**
 
@@ -958,11 +908,7 @@ after I reviewed and approved the plan.
 > test set. Log everything to the `nba-draft-prospect-multimodal` MLflow
 > experiment. Return a results dict in the same format as the other models.
 
----
-
-## 9. Test Suite
-
-**Commits**: `f1a9621`
+9. Test Suite
 
 Claude wrote all of the testing in the tests/ folder (this was done throughout
 each of the implementation stesp). I directed what to validate through the tests
@@ -980,12 +926,10 @@ with the XGBoost model implementation.
 > `conftest.py` with a `small_df` fixture. Also fix the XGBoost lazy import
 > in `regression_model.py` — it's failing on import because of macOS libomp.
 
----
-
-## 10. Documentation & Planning Files
+10. Documentation & Planning Files
 
 The following markdown files were generated by claude based on my analysis and
-direction. In each case the ideas, decisions, and targets came from me; claude
+direction. In each case the ideas, decisions, and targets came from me and claude
 produced the written artifact.
 
 | File | Purpose |
@@ -1000,19 +944,17 @@ produced the written artifact.
 | `README.md` | Ongoing project README maintained with claude |
 
 Within the README.md certain sections were split up between myself and claude.
-This document for example, I had claude go through my git commit history and create
+This portion for example, I had claude go through my git commit history and create
 a list of all the major changes and commits I had organized by topic. It then used
 those commits to generate sample 'conversations' from the discussion. However all of
 the text explaining those commits and claude usage was written by me. Additionally, 
 the architecture diagrams in mermaid were created by claude through my prompting, as 
 well as the run instructions. 
 
----
+Summary
 
-## Summary
-
-I (Kincaid) used claude as a coding assistant and documentation generator throughout
-this project. The workflow was consistently:
+I used claude as a coding assistant and documentation generator throughout this project. 
+The workflow was consistently:
 
 1. I analyzed model results, identified what to change, and decided the approach.
 2. I described the change and its constraints to Claude in plain language.
