@@ -77,6 +77,8 @@ model:
     pretrained: "distilbert-base-uncased"
     output_dim: 64
     hidden_dim: 32
+    batch_size: 32
+    lr: 2e-4
     dropout: 0.2
     huber_beta: 1.0
     max_length: 128
