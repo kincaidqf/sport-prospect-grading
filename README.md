@@ -1051,3 +1051,7 @@ I used LLM assistants for brainstorming and implementation support.
 - The “best hits” visualization.
 - Brainstorming and shaping a simpler text-only baseline model.
 - Running the multimodal pipeline on 2026 prospects (scripts and wiring).
+
+---
+# Matthew AI Usage Disclosure
+For this project I also used Claude code, I used it for the purposes of adding comments of my code. I also used it for things such as the web scraper that was used to gather the data for the NBA scouting reports. I also used it for general guidance about what types of methods to use for the regression and initial classification tests. The guidance would come down to explaining why certain choices might be better or why certain outputs happened (why I might want to use Lasso compared to Ridge, why the R^2 are negative, etc...).
