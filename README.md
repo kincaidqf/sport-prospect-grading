@@ -865,19 +865,7 @@ committed seperately, with claude working through those plans.
 
 I designed the probability stacking architecture (base models > shared 4-class
 probability interface > meta-model) and had claude generate `PROBABILITY_STACKING_MODEL.md`
-documenting the plan, then implement it. This involved:
-
-- Writing `src/models/probability.py` with a shared `BaseModelBundle` dataclass,
-  normalized probability utilities, and Gaussian CDF conversion for regression
-  z-scores.
-- Refactoring `classification_model.py` to expose a
-  `train_selected_classification_models()` function with OOF probability output.
-- Refactoring `regression_model.py` to expose `train_selected_regression_models()`
-  with residual-std-based probability conversion.
-- Creating `classification_inference.py` as the clean probability-producing
-  inference interface.
-- Writing `scripts/check_classification_contract.py` to verify the 4-class
-  probability contract at runtime.
+documenting the plan, then implement it. 
 
 **Example conversation:**
 
