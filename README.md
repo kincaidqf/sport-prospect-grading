@@ -741,8 +741,6 @@ Docker setup.
 
 2. Data Pipeline: NBA & NCAA Collection and Recovery
 
-**Commits**: `8f378d7`, `50c7a42`, `662123a`, `489145a`, `29b78c5`
-
 Claude wrote the data-gathering scripts pulling first 3 NBA seasons per player 
 from the NBA API, the fuzzy-name audit to recover players, backfilling missing
 columns, etc. I directed each of these scripts, particularly the sources to use,
